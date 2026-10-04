@@ -37,7 +37,7 @@ Documentation = "https://docs.intomind.com"
 Source = "https://github.com/intomind/api"
 
 [tool.setuptools]
-packages = ["intomind"]
+packages = ["intomind", "intomind.data"]
 
 [tool.setuptools.package-data]
-intomind = ["data/*.imr"]
+"intomind.data" = ["*.imr"]
