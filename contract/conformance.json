@@ -57,7 +57,7 @@
     {
       "name": "device info, the IntoMind One",
       "kind": "device_info",
-      "bytes": "0104010400041840420f0020aa4400edf70700a0a1a2a3a4a5a6a7500101070001020304050607086000f401d00704200010f40000700400002006000000000000000000000000000000000003000000",
+      "bytes": "0104010401041840420f0020aa4400edf70700a0a1a2a3a4a5a6a7500101070001020304050607086000f401d00704200010f40000700400002006000000000000000000000000000000000003000000",
       "fields": {
         "adc_bits": 24,
         "app_slot_bytes": 290816,
@@ -65,7 +65,7 @@
         "capabilities_high": 3,
         "channel_count": 4,
         "device_id": "a0a1a2a3a4a5a6a7",
-        "fw_version": "1.4.0",
+        "fw_version": "1.4.1",
         "head_max_outputs": 32,
         "head_slot_bytes": 4096,
         "head_slots": 4,
@@ -86,7 +86,7 @@
     {
       "name": "device info, an older device that reports only the original fields",
       "kind": "device_info",
-      "bytes": "0104010400041840420f0020aa4400edf70700a0a1a2a3a4a5a6a7",
+      "bytes": "0104010401041840420f0020aa4400edf70700a0a1a2a3a4a5a6a7",
       "fields": {
         "channel_count": 4,
         "device_id": "a0a1a2a3a4a5a6a7",
@@ -296,6 +296,15 @@
       }
     },
     {
+      "name": "list the encoder each head names",
+      "kind": "control_request",
+      "bytes": "8a",
+      "fields": {
+        "arg": null,
+        "opcode": 138
+      }
+    },
+    {
       "name": "the device's time, in answer to a time request",
       "kind": "control_response",
       "bytes": "40000807060504030201",
@@ -373,7 +382,7 @@
     {
       "name": "three head slots: the built-in one empty, one good, one that failed its hash",
       "kind": "list_heads",
-      "bytes": "0103000000000000000000000000000000000000000000000000000000000000010102000707070707070707666f637573000000000000000000000000000202000000000000000000000000000000000000000000000000000000000000000000000000a7c61680d9a202db0000000000000000",
+      "bytes": "0103000000000000000000000000000000000000000000000000000000000000010102000707070707070707666f63757300000000000000000000000000020200000000000000000000000000000000000000000000000000000000",
       "fields": {
         "active_slot": 1,
         "heads": [
@@ -383,7 +392,6 @@
             "state": 0
           },
           {
-            "encoder_id": "a7c61680d9a202db",
             "head_id": "0707070707070707",
             "name": "focus",
             "out_dim": 2,
@@ -394,6 +402,72 @@
             "out_dim": 0,
             "slot": 2,
             "state": 2
+          }
+        ]
+      }
+    },
+    {
+      "name": "the IntoMind One's five head slots, every one holding a head",
+      "kind": "list_heads",
+      "bytes": "0305000101001010101010101010686561642d30000000000000000000000000010102001111111111111111686561642d31000000000000000000000000020103001212121212121212686561642d32000000000000000000000000030104001313131313131313686561642d33000000000000000000000000040105001414141414141414686561642d34000000000000000000000000",
+      "fields": {
+        "active_slot": 3,
+        "heads": [
+          {
+            "head_id": "1010101010101010",
+            "name": "head-0",
+            "out_dim": 1,
+            "slot": 0,
+            "state": 1
+          },
+          {
+            "head_id": "1111111111111111",
+            "name": "head-1",
+            "out_dim": 2,
+            "slot": 1,
+            "state": 1
+          },
+          {
+            "head_id": "1212121212121212",
+            "name": "head-2",
+            "out_dim": 3,
+            "slot": 2,
+            "state": 1
+          },
+          {
+            "head_id": "1313131313131313",
+            "name": "head-3",
+            "out_dim": 4,
+            "slot": 3,
+            "state": 1
+          },
+          {
+            "head_id": "1414141414141414",
+            "name": "head-4",
+            "out_dim": 5,
+            "slot": 4,
+            "state": 1
+          }
+        ]
+      }
+    },
+    {
+      "name": "the encoder each of three heads names: only the good one says",
+      "kind": "list_head_encoders",
+      "bytes": "0300000000000000000001a7c61680d9a202db020000000000000000",
+      "fields": {
+        "heads": [
+          {
+            "encoder_id": "0000000000000000",
+            "slot": 0
+          },
+          {
+            "encoder_id": "a7c61680d9a202db",
+            "slot": 1
+          },
+          {
+            "encoder_id": "0000000000000000",
+            "slot": 2
           }
         ]
       }
@@ -1385,13 +1459,13 @@
     {
       "name": "device info claiming a length below the one this version defines",
       "kind": "device_info",
-      "bytes": "0104010400041840420f0020aa4400edf70700a0a1a2a3a4a5a6a73c0101070001020304050607086000f401d00704200010f40000700400002006000000000000000000000000000000000003000000",
+      "bytes": "0104010401041840420f0020aa4400edf70700a0a1a2a3a4a5a6a73c0101070001020304050607086000f401d00704200010f40000700400002006000000000000000000000000000000000003000000",
       "reason": "invalid"
     },
     {
       "name": "device info that ends inside its own fields",
       "kind": "device_info",
-      "bytes": "0104010400041840420f0020aa4400edf70700a0a1a2a3a4a5a6a750010107000102030405060708",
+      "bytes": "0104010401041840420f0020aa4400edf70700a0a1a2a3a4a5a6a750010107000102030405060708",
       "reason": "truncated"
     },
     {
@@ -1461,6 +1535,12 @@
       "reason": "invalid"
     },
     {
+      "name": "a head encoders request with an argument it does not take",
+      "kind": "control_request",
+      "bytes": "8a01",
+      "reason": "invalid"
+    },
+    {
       "name": "an answer that is only an opcode",
       "kind": "control_response",
       "bytes": "40",
@@ -1499,7 +1579,19 @@
     {
       "name": "a head list one byte shorter than the count it declares",
       "kind": "list_heads",
-      "bytes": "0103000000000000000000000000000000000000000000000000000000000000010102000707070707070707666f637573000000000000000000000000000202000000000000000000000000000000000000000000000000000000000000000000000000a7c61680d9a202db00000000000000",
+      "bytes": "0103000000000000000000000000000000000000000000000000000000000000010102000707070707070707666f637573000000000000000000000000000202000000000000000000000000000000000000000000000000000000",
+      "reason": "invalid"
+    },
+    {
+      "name": "a head encoders answer with nothing in it",
+      "kind": "list_head_encoders",
+      "bytes": "",
+      "reason": "truncated"
+    },
+    {
+      "name": "a head encoders answer one byte shorter than the count it declares",
+      "kind": "list_head_encoders",
+      "bytes": "0300000000000000000001a7c61680d9a202db0200000000000000",
       "reason": "invalid"
     },
     {

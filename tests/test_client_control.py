@@ -7,7 +7,7 @@ have caught the client handing a decoder the whole answer, opcode and
 status included, and reading the opcode as the battery's millivolts.
 """
 from __future__ import annotations
-import asyncio, pathlib, struct, sys, traceback
+import asyncio, dataclasses, pathlib, struct, sys, traceback
 
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent.parent))
 from intomind import protocol as P          # noqa: E402
@@ -91,6 +91,33 @@ def test_answers_are_decoded_from_their_payload_not_the_whole_response():
     assert mi.ready and mi.active_head == 1 and mi.encoder_id == "a7c61680d9a202db" and mi.takes("time_domain"), mi
     active, heads = asyncio.run(dev.heads())
     assert active == 1 and heads[0].usable and heads[0].name.rstrip("\0") == "walk", heads
+
+
+def test_a_1_4_device_says_which_encoder_each_head_names_in_its_own_answer():
+    answers = _answers()
+    answers[P.OPCODES["list_head_encoders"]] = bytes([0x8A, 0, 1, 1]) + bytes.fromhex("a7c61680d9a202db")
+    dev, link = _device(ALL_1_1, answers)
+    dev.info = dataclasses.replace(dev.info, protocol=(1, 4))
+    active, heads = asyncio.run(dev.heads())
+    assert [w[0] for w in link.writes] == [0x82, 0x8A], link.writes
+    assert active == 1 and heads[0].encoder_id == "a7c61680d9a202db", heads
+    assert heads[0].trained_beside("a7c61680d9a202db") is True
+
+
+def test_a_device_that_refuses_the_encoder_answer_still_lists_its_heads():
+    answers = _answers()
+    answers[P.OPCODES["list_head_encoders"]] = bytes([0x8A, 1])
+    dev, _ = _device(ALL_1_1, answers)
+    dev.info = dataclasses.replace(dev.info, protocol=(1, 4))
+    active, heads = asyncio.run(dev.heads())
+    assert active == 1 and heads[0].usable, heads
+    assert heads[0].trained_beside("a7c61680d9a202db") is None, "a head the device did not describe is not judged"
+
+
+def test_a_device_before_1_4_is_not_asked_for_encoders():
+    dev, link = _device(ALL_1_1, _answers())
+    asyncio.run(dev.heads())
+    assert [w[0] for w in link.writes] == [0x82], link.writes
 
 
 def test_the_chain_operations_send_the_contracts_bytes_and_read_its_answers():

@@ -502,8 +502,8 @@ class Device:
     async def command(self, op: int, arg: Optional[int] = None,
                       timeout: float = 6.0, data: Optional[bytes] = None) -> bytes:
         """One control exchange. `arg` is the one-byte form most opcodes use;
-        `data` carries a variable-length body (OP_SET_FILTERS' band list), which
-        the firmware's write_ctl now accepts."""
+        `data` carries the variable-length body of the few that take one,
+        such as SET_PIPELINE's chain and SET_NAME's parts."""
         if not self.connected:
             raise ConnectionError("BLE link is down")
         if data is not None:
@@ -796,9 +796,19 @@ class Device:
         return P.decode_model_info(await self._payload("get_model_info"))
 
     async def heads(self) -> tuple[int | None, list]:
-        """The head slots and which one is selected."""
+        """The head slots, which one is selected, and the encoder each head
+        names."""
         self._require("heads", "hold heads")
-        return P.decode_heads(await self._payload("list_heads"))
+        active, heads = P.decode_heads(await self._payload("list_heads"))
+        if self.info.protocol >= (1, 4):
+            try:
+                encoders = P.decode_head_encoders(await self._payload("list_head_encoders"))
+            except Refused:
+                # A device that refuses this has not said which encoder its
+                # heads name, so each is shown as a head that does not say.
+                encoders = {}
+            heads = P.with_encoders(heads, encoders)
+        return active, heads
 
     async def select_head(self, slot: int):
         self._require("heads", "hold heads")

@@ -28,6 +28,7 @@ device, and the scaling helper takes them as arguments.
 """
 from __future__ import annotations
 
+import dataclasses
 import struct
 from dataclasses import dataclass, field
 
@@ -119,6 +120,8 @@ OPCODES = {
     "get_model_interval": 0x89,
     "get_name": 0x47,
     "set_name": 0x48,
+    # New in 1.4.
+    "list_head_encoders": 0x8A,
     "soft_reset": 0xF0,
 }
 NAME_BY_OPCODE = {v: k for k, v in OPCODES.items()}
@@ -671,12 +674,17 @@ class Head:
 
 
 def decode_heads(payload: bytes) -> tuple[int | None, list[Head]]:
-    """The head slots, and which one is selected. None means none is."""
+    """The head slots, and which one is selected. None means none is.
+
+    The heads say nothing here of the encoder they name: from 1.4 that is
+    `decode_head_encoders`, which `with_encoders` folds in."""
     if len(payload) < 2:
         raise Truncated("a head list is at least its count")
     active, n = payload[0], payload[1]
     records_end = 2 + n * 30
-    # 1.3 appends one eight byte encoder id per record after the records.
+    # 1.3 defined one eight byte encoder id per record after the records.
+    # No device sent it, because the IntoMind One's list was too long with
+    # it, and 1.4 withdraws it. One that comes is still read.
     if len(payload) not in (records_end, records_end + n * 8):
         raise Invalid(f"a list of {n} heads is {records_end} bytes, or {records_end + n * 8} with its "
                       f"encoder ids, and this one is {len(payload)}")
@@ -688,6 +696,23 @@ def decode_heads(payload: bytes) -> tuple[int | None, list[Head]]:
         heads.append(Head(slot, HEAD_STATES.get(state, f"state {state}"), out_dim,
                           r[4:12].hex(), r[12:28].rstrip(b"\0").decode("utf-8", "replace"), encoder))
     return (None if active == NO_HEAD else active), heads
+
+
+def decode_head_encoders(payload: bytes) -> dict[int, str]:
+    """1.4: the encoder each head names, by slot, from LIST_HEAD_ENCODERS:
+    sixteen zeros for an empty slot or a head that does not say."""
+    if len(payload) < 1:
+        raise Truncated("a list of head encoders is at least its count")
+    n = payload[0]
+    if len(payload) != 1 + n * 9:
+        raise Invalid(f"a list of {n} head encoders is {1 + n * 9} bytes, and this one is {len(payload)}")
+    return {payload[1 + i * 9]: payload[2 + i * 9: 10 + i * 9].hex() for i in range(n)}
+
+
+def with_encoders(heads: list[Head], encoders: dict[int, str]) -> list[Head]:
+    """The heads, each with the encoder `encoders` says it names. A slot
+    missing from it keeps what it had."""
+    return [dataclasses.replace(h, encoder_id=encoders.get(h.slot, h.encoder_id)) for h in heads]
 
 
 @dataclass(frozen=True)

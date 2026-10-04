@@ -245,6 +245,7 @@ def test_every_malformed_message_is_refused_for_its_stated_reason():
         "boot_info": P.decode_boot_info,
         "model_info": P.decode_model_info,
         "list_heads": P.decode_heads,
+        "list_head_encoders": P.decode_head_encoders,
         "prediction": P.decode_prediction,
         "update_response": P.decode_update_response,
         "head": P.decode_head,
@@ -497,19 +498,34 @@ def test_the_cadence_and_the_name_encode_and_decode_as_the_vectors_say():
             raise AssertionError(f"{bad!r} was read as a name")
 
 
-def test_a_head_names_its_encoder_and_the_list_carries_it():
+def test_a_head_names_its_encoder_and_its_own_answer_carries_it():
     blob = P.build_head([[1, -2, 3]], [7], [0.5], name="focus", encoder_id="a7c61680d9a202db")
     h = P.decode_head(blob)
     assert (h.version, h.encoder_id, h.in_dim, h.out_dim) == (2, "a7c61680d9a202db", 3, 1)
     assert len(blob) == P.head_blob_len(3, 1, 2) == P.head_blob_len(3, 1, 1) + 8
     plain = P.decode_head(P.build_head([[1, -2, 3]], [7], [0.5], name="focus"))
     assert plain.encoder_id == P.NO_ENCODER_ID
+    # 1.4: the list says nothing of encoders, and LIST_HEAD_ENCODERS does.
     v = by_kind("list_heads")[0]
     _active, heads = P.decode_heads(bytes.fromhex(v["bytes"]))
-    assert heads[1].encoder_id == v["fields"]["heads"][1]["encoder_id"]
+    assert all(h.encoder_id == P.NO_ENCODER_ID for h in heads)
+    e = by_kind("list_head_encoders")[0]
+    encoders = P.decode_head_encoders(bytes.fromhex(e["bytes"]))
+    assert encoders == {x["slot"]: x["encoder_id"] for x in e["fields"]["heads"]}
+    heads = P.with_encoders(heads, encoders)
+    assert heads[1].encoder_id == "a7c61680d9a202db"
     assert heads[1].trained_beside("a7c61680d9a202db") is True
     assert heads[1].trained_beside("0000000000000001") is False
     assert heads[0].trained_beside("a7c61680d9a202db") is None, "a head that does not say is not judged"
+
+
+def test_the_intomind_ones_longest_head_list_decodes():
+    v = next(x for x in by_kind("list_heads") if "IntoMind One" in x["name"])
+    assert len(bytes.fromhex(v["bytes"])) + 2 <= 156, "an answer is at most 156 bytes"
+    active, heads = P.decode_heads(bytes.fromhex(v["bytes"]))
+    assert active == v["fields"]["active_slot"]
+    assert [(h.slot, h.state, h.out_dim, h.head_id, h.name) for h in heads] == [
+        (x["slot"], P.HEAD_STATES[x["state"]], x["out_dim"], x["head_id"], x["name"]) for x in v["fields"]["heads"]]
 
 
 def test_a_synthetic_packet_decodes_like_a_measured_one_and_says_so():
