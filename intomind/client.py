@@ -17,6 +17,7 @@ from collections import deque
 from dataclasses import dataclass, field
 from typing import Callable, NamedTuple, Optional
 from bleak import BleakScanner, BleakClient
+from bleak.exc import BleakError
 
 from . import adapters, pairing, protocol as P, timebase
 from .protocol import DeviceInfo, ProtocolError
@@ -1075,6 +1076,22 @@ class Device:
             if r.op == request[0]:
                 return r
 
+    #: Data writes between progress checks during a transfer, and how many
+    #: times a transfer may carry on from the device's own count.
+    TRANSFER_BURST = 8
+    TRANSFER_RESUMES = 64
+
+    async def _update_retrying(self, request: bytes, attempts: int = 3) -> "P.UpdateResponse":
+        """An update exchange that a device still writing its flash may turn
+        away: tried again after a pause, a few times, then given up."""
+        for attempt in range(attempts):
+            try:
+                return await self._update(request)
+            except (TimeoutError, asyncio.TimeoutError, BleakError):
+                if attempt == attempts - 1:
+                    raise
+                await asyncio.sleep(0.5 * (attempt + 1))
+
     async def transfer(self, image: bytes, target: str = "app", slot: int = 0,
                        progress=None) -> str:
         """Carry a signed image to the device and have it verified there.
@@ -1098,21 +1115,32 @@ class Device:
             raise RuntimeError(f"the device refused to start the transfer: {r.status_name}")
         _target_slot, chunk_max, offset = r.start()
         chunk = min(chunk_max, self.info.update_chunk_max or chunk_max, 244)
-        since_query = 0
+        # SHORT BURSTS, AND THE DEVICE'S OWN COUNT. Writes without a response
+        # have no flow control, and a device busy writing its flash drops
+        # some. Asking after every eight keeps the queue shallow, and when
+        # the device has fewer bytes than were sent the transfer carries on
+        # from the device's count, which is what the resume offset is for.
+        # Bounded: a transfer that stops advancing is a fault, not a delay.
+        since_query, resumes, resumed_at = 0, 0, -1
         while offset < len(image):
             end = min(offset + chunk, len(image))
             await self._client.write_gatt_char(UPDATE_DATA, image[offset:end], response=False)
             offset = end
             since_query += 1
-            if since_query >= 32 or offset == len(image):
+            if since_query >= self.TRANSFER_BURST or offset == len(image):
                 since_query = 0
-                q = await self._update(P.encode_update_op("query"))
+                q = await self._update_retrying(P.encode_update_op("query"))
                 if not q.ok:
                     raise RuntimeError(f"the device refused a progress check: {q.status_name}")
                 _state, device_offset, device_crc = q.query()
                 if device_offset != offset:
-                    raise RuntimeError(
-                        f"the device accepted {device_offset} bytes where {offset} were sent")
+                    resumes += 1
+                    if resumes > self.TRANSFER_RESUMES or device_offset <= resumed_at:
+                        raise RuntimeError(
+                            f"the device accepted {device_offset} bytes where {offset} were sent, "
+                            f"and the transfer is not advancing")
+                    resumed_at = offset = device_offset
+                    continue
                 ours = binascii.crc32(image[:offset]) & 0xFFFFFFFF
                 if device_crc != ours:
                     raise RuntimeError(

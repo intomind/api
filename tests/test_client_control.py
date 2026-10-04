@@ -120,6 +120,77 @@ def test_a_device_before_1_4_is_not_asked_for_encoders():
     assert [w[0] for w in link.writes] == [0x82], link.writes
 
 
+class _UpdateLink:
+    """The update service as a busy device runs it: once it falls behind it
+    takes no more writes that carry no acknowledgment until it is asked
+    where it is, and it turns one progress check away while it writes its
+    flash."""
+    is_connected = True
+
+    def __init__(self, dev, drop_every: int, refuse_first_query: bool):
+        self.dev, self.drop_every, self.refuse = dev, drop_every, refuse_first_query
+        self.received, self.data_writes, self.queries = bytearray(), 0, 0
+        self.notify, self.behind = None, False
+
+    async def start_notify(self, _uuid, callback):
+        self.notify = callback
+
+    async def write_gatt_char(self, uuid, payload, response=True):
+        import binascii
+        from bleak.exc import BleakGATTProtocolError, BleakGATTProtocolErrorCode
+        payload = bytes(payload)
+        if uuid == P.UPDATE_DATA:
+            self.data_writes += 1
+            if self.drop_every and self.data_writes % self.drop_every == 0:
+                self.behind = True
+            if not self.behind:
+                self.received += payload
+            return
+        op = payload[0]
+        if op == P.UPDATE_OPS["start"]:
+            answer = bytes([op, 0]) + struct.pack("<BHI", 0, 100, 0)
+        elif op == P.UPDATE_OPS["query"]:
+            self.queries += 1
+            self.behind = False
+            if self.refuse and self.queries == 1:
+                raise BleakGATTProtocolError(BleakGATTProtocolErrorCode.UNLIKELY_ERROR)
+            crc = binascii.crc32(bytes(self.received)) & 0xFFFFFFFF
+            answer = bytes([op, 0]) + struct.pack("<BII", 1, len(self.received), crc)
+        elif op == P.UPDATE_OPS["finish"]:
+            answer = bytes([op, 0, 0])
+        else:
+            answer = bytes([op, 0])
+        self.notify(None, answer)
+
+
+def test_a_transfer_carries_on_past_dropped_writes_and_a_busy_progress_check():
+    dev = Device(_BLE())
+    dev.info = P.DeviceInfo(protocol=(1, 4), firmware=(1, 4, 1), channels=4, adc_bits=24,
+                            tick_hz=1_000_000, vref_uv=4_500_000, capabilities=ALL_1_1,
+                            supported_rates=7, device_id="a0a1a2a3a4a5a6a7", hardware=(1, 1, 7))
+    image = bytes(range(256)) * 20
+    link = _UpdateLink(dev, drop_every=13, refuse_first_query=True)
+    dev._client = link
+    assert asyncio.run(dev.transfer(image)) == "verified"
+    assert bytes(link.received) == image, "every byte arrived once, in order"
+    assert link.queries > len(image) // (100 * Device.TRANSFER_BURST), "progress is asked in short bursts"
+
+
+def test_a_transfer_that_stops_advancing_is_given_up():
+    dev = Device(_BLE())
+    dev.info = P.DeviceInfo(protocol=(1, 4), firmware=(1, 4, 1), channels=4, adc_bits=24,
+                            tick_hz=1_000_000, vref_uv=4_500_000, capabilities=ALL_1_1,
+                            supported_rates=7, device_id="a0a1a2a3a4a5a6a7", hardware=(1, 1, 7))
+    link = _UpdateLink(dev, drop_every=1, refuse_first_query=False)
+    dev._client = link
+    try:
+        asyncio.run(dev.transfer(bytes(5000)))
+    except RuntimeError as e:
+        assert "not advancing" in str(e), e
+    else:
+        raise AssertionError("a transfer that never advanced was reported as done")
+
+
 def test_the_chain_operations_send_the_contracts_bytes_and_read_its_answers():
     dev, link = _device(ALL_1_1, _answers())
     cat = asyncio.run(dev.pipeline_catalog())
