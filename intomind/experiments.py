@@ -75,6 +75,7 @@ def cue_sound(tone: str, text: str = ""):
 
 
 def say(text: str):
+    """Speak `text` aloud through the host's audio output."""
     audio.play("speech", text)
 
 
@@ -95,6 +96,8 @@ class Recorder:
         self.reset()
 
     def reset(self):
+        """Clear every buffered sample and packet, and leave the recorder
+        disarmed."""
         self.idx, self.dt, self.ht = [], [], []
         self.ch, self.lo, self.gp = [], [], []
         self.packets = []
@@ -115,6 +118,8 @@ class Recorder:
         self.armed = True
 
     def on_sample(self, _dev, s):
+        """Buffer one sample, while armed. Set as a device's `on_sample`
+        callback."""
         if not self.armed:
             return
         self.idx.append(s.index); self.dt.append(s.device_time)
@@ -122,6 +127,8 @@ class Recorder:
         self.lo.append(s.leadoff); self.gp.append(s.gap_before)
 
     def on_packet(self, _dev, p):
+        """Buffer one packet, while armed. Set as a device's `on_packet`
+        callback."""
         if self.armed:
             self.packets.append(p)
 
@@ -343,11 +350,14 @@ class RunCtx:
     # it; `timebase.align_events` needs the pair to put events and samples on
     # one ruler. See timebase.py for why neither clock alone is enough.
     def marker(self, name: str, **kw) -> dict:
+        """Record a timestamped marker event named `name` and return it."""
         e = dict(cond=name, kind="marker", **timebase.stamp(), **kw)
         self.events.append(e)
         return e
 
     def cue(self, cond: str, **kw) -> dict:
+        """Record a timestamped cue event for condition `cond` and return
+        it."""
         e = dict(cond=cond, kind="cue", **timebase.stamp(), **kw)
         self.events.append(e)
         return e
@@ -384,6 +394,7 @@ def _lbl(ctx, prefix: str) -> str:
              dict(name="note", type="text", default="")] + TONE_PARAMS,
             enforced=CONSENT,)
 async def baseline(dev, rec, emit, p, ctx):
+    """A fixed-duration resting recording."""
     label = _lbl(ctx, "baseline")
     await emit(dict(type="note", text=f"recording {p['seconds']}s → {label}"))
     cue_sound(p.get("tone_start", "speech"), "Recording.")
@@ -404,6 +415,8 @@ async def baseline(dev, rec, emit, p, ctx):
                         reject_pp_uv=150.0, test="wilcoxon_paired_blocks",
                         allow_pseudoreplication=False))
 async def berger(dev, rec, emit, p, ctx):
+    """Cued eyes-closed and eyes-open blocks, alternating for a set number
+    of repetitions."""
     cfg = _cfg(ctx)
     label = _lbl(ctx, "berger")
     block, reps = float(p["block"]), int(p["reps"])
@@ -465,6 +478,8 @@ async def berger(dev, rec, emit, p, ctx):
             # over-reach as forcing `rld: on`.
 )
 async def record(dev, rec, emit, p, ctx):
+    """An open-ended recording that runs until stopped, with marker
+    buttons to timestamp events as they happen."""
     cfg = _cfg(ctx)
     label = _lbl(ctx, "record")
     started = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
@@ -506,7 +521,9 @@ async def record(dev, rec, emit, p, ctx):
              dict(name="lead_in", type="number", default=6),
              dict(name="note", type="text", default="")] + TONE_PARAMS,
             enforced=CONSENT,)
-async def protocol(dev, rec, emit, p, ctx):
+async def cued_protocol(dev, rec, emit, p, ctx):
+    """A custom cued protocol: one step per line, each spoken and
+    timestamped, repeated for a set number of repetitions."""
     steps = []
     for line in str(p["steps"]).splitlines():
         if not line.strip():
@@ -629,6 +646,8 @@ async def _cued_trials(dev, rec, emit, p, ctx, *, label, conds, texts,
                         min_pp_uv=100.0, min_detect_frac=0.9,
                         max_latency_sd_s=0.25, sham_must_be_null=True))
 async def blink(dev, rec, emit, p, ctx):
+    """Cued blink trials, with interleaved sham trials that control for
+    the cue itself."""
     import random
     trials = int(p["trials"])
     conds = ["blink"] * trials
@@ -657,6 +676,8 @@ async def blink(dev, rec, emit, p, ctx):
                         min_ratio=10.0, alpha=0.001,
                         test="wilcoxon_paired_trials"))
 async def jaw_clench(dev, rec, emit, p, ctx):
+    """Cued jaw-clench trials, with interleaved sham trials that control
+    for the cue itself."""
     import random
     trials = int(p["trials"])
     conds = ["clench"] * trials
