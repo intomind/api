@@ -1,0 +1,43 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "intomind"
+version = "1.4.0"
+description = "The IntoMind instrument API: the protocol, the recording, its provenance, and the analyses that read it back"
+readme = "README.md"
+requires-python = ">=3.11"
+license = "AGPL-3.0-only"
+license-files = ["LICENSE"]
+authors = [{ name = "IntoMind", email = "support@intomind.com" }]
+keywords = ["eeg", "bci", "neuroscience", "bluetooth", "instrument"]
+classifiers = [
+    "Development Status :: 5 - Production/Stable",
+    "Intended Audience :: Science/Research",
+    "Programming Language :: Python :: 3",
+    "Topic :: Scientific/Engineering",
+]
+dependencies = ["bleak", "numpy"]
+
+# Everything optional is optional for a reason, and the code that needs it
+# says so rather than failing at import.
+[project.optional-dependencies]
+# The analyses that need a signal processing library.
+analysis = ["scipy"]
+# MATLAB version 7.3 export, which is HDF5.
+mat = ["h5py"]
+# The console some devices have and some do not.
+serial = ["pyserial"]
+all = ["scipy", "h5py", "pyserial"]
+
+[project.urls]
+Homepage = "https://intomind.com"
+Documentation = "https://docs.intomind.com"
+Source = "https://github.com/intomind/api"
+
+[tool.setuptools]
+packages = ["intomind"]
+
+[tool.setuptools.package-data]
+intomind = ["data/*.imr"]

@@ -1,0 +1,1839 @@
+{
+  "protocol": "1.4",
+  "note": "Emitted from the codec the firmware runs. An implementation is conformant when it decodes every vector in `decode` to the stated fields, refuses every vector in `refuse` for the stated reason, and reproduces `scaling`, `continuity`, and `embedding` exactly. A 64-bit field is written as a decimal string, because a JSON number cannot hold one exactly; parse it as an integer, never as a floating-point number. A count that does not exist is null: a break in the timeline has no extent, and zero would claim nothing was lost.",
+  "uuids": [
+    {
+      "name": "service",
+      "fill": 1,
+      "uuid": "f3a10001-2c4b-4d1e-9a6f-1b2c3d4e5f60"
+    },
+    {
+      "name": "device_info",
+      "fill": 2,
+      "uuid": "f3a10002-2c4b-4d1e-9a6f-1b2c3d4e5f60"
+    },
+    {
+      "name": "control",
+      "fill": 3,
+      "uuid": "f3a10003-2c4b-4d1e-9a6f-1b2c3d4e5f60"
+    },
+    {
+      "name": "control_response",
+      "fill": 4,
+      "uuid": "f3a10004-2c4b-4d1e-9a6f-1b2c3d4e5f60"
+    },
+    {
+      "name": "eeg_data",
+      "fill": 5,
+      "uuid": "f3a10005-2c4b-4d1e-9a6f-1b2c3d4e5f60"
+    },
+    {
+      "name": "status",
+      "fill": 6,
+      "uuid": "f3a10006-2c4b-4d1e-9a6f-1b2c3d4e5f60"
+    },
+    {
+      "name": "update_control",
+      "fill": 8,
+      "uuid": "f3a10008-2c4b-4d1e-9a6f-1b2c3d4e5f60"
+    },
+    {
+      "name": "update_data",
+      "fill": 9,
+      "uuid": "f3a10009-2c4b-4d1e-9a6f-1b2c3d4e5f60"
+    },
+    {
+      "name": "predictions",
+      "fill": 10,
+      "uuid": "f3a1000a-2c4b-4d1e-9a6f-1b2c3d4e5f60"
+    },
+    {
+      "name": "embeddings",
+      "fill": 11,
+      "uuid": "f3a1000b-2c4b-4d1e-9a6f-1b2c3d4e5f60"
+    }
+  ],
+  "decode": [
+    {
+      "name": "device info, the IntoMind One",
+      "kind": "device_info",
+      "bytes": "0104010400041840420f0020aa4400edf70700a0a1a2a3a4a5a6a7500101070001020304050607086000f401d00704200010f40000700400002006000000000000000000000000000000000003000000",
+      "fields": {
+        "adc_bits": 24,
+        "app_slot_bytes": 290816,
+        "capabilities": 63469,
+        "capabilities_high": 3,
+        "channel_count": 4,
+        "device_id": "a0a1a2a3a4a5a6a7",
+        "fw_version": "1.4.0",
+        "head_max_outputs": 32,
+        "head_slot_bytes": 4096,
+        "head_slots": 4,
+        "hw_version": "1.1.7",
+        "info_len": 80,
+        "model_embed_dim": 96,
+        "model_native_sps": 500,
+        "model_window_samples": 2000,
+        "proto_major": 1,
+        "proto_minor": 4,
+        "supported_rates": 7,
+        "time_tick_hz": 1000000,
+        "update_chunk_max": 244,
+        "vref_uv": 4500000,
+        "weights_image_bytes": 401408
+      }
+    },
+    {
+      "name": "device info, an older device that reports only the original fields",
+      "kind": "device_info",
+      "bytes": "0104010400041840420f0020aa4400edf70700a0a1a2a3a4a5a6a7",
+      "fields": {
+        "channel_count": 4,
+        "device_id": "a0a1a2a3a4a5a6a7",
+        "extension_present": false,
+        "proto_major": 1,
+        "proto_minor": 4
+      }
+    },
+    {
+      "name": "two samples, four channels, test mode, lead-off on, on USB",
+      "kind": "eeg_data",
+      "bytes": "01160000efbeaddeefcdab896745230102050605000001ffffff8000007fffff0003e80003e90003ea0003eb",
+      "fields": {
+        "device_time": "81985529216486895",
+        "discontinuity": false,
+        "gain": 24,
+        "gain_code": 6,
+        "leadoff_active": true,
+        "loff_statp": 5,
+        "mode": 1,
+        "n_samples": 2,
+        "packet_type": 1,
+        "rate_code": 5,
+        "sample_index": 3735928559,
+        "samples": [
+          [
+            1,
+            -1,
+            -8388608,
+            8388607
+          ],
+          [
+            1000,
+            1001,
+            1002,
+            1003
+          ]
+        ],
+        "samples_lost_before": 0,
+        "sps": 500,
+        "usb_present": true
+      }
+    },
+    {
+      "name": "one synthetic sample, four channels, the device generating",
+      "kind": "eeg_data",
+      "bytes": "041c0000f401000028460f0000000000010006050003e80007d0000bb8000fa0",
+      "fields": {
+        "device_time": "1001000",
+        "discontinuity": false,
+        "gain": 24,
+        "gain_code": 6,
+        "leadoff_active": false,
+        "loff_statp": 0,
+        "mode": 3,
+        "n_samples": 1,
+        "packet_type": 4,
+        "rate_code": 5,
+        "sample_index": 500,
+        "samples": [
+          [
+            1000,
+            2000,
+            3000,
+            4000
+          ]
+        ],
+        "samples_lost_before": 0,
+        "sps": 500,
+        "synthetic": true,
+        "usb_present": true
+      }
+    },
+    {
+      "name": "start the stream",
+      "kind": "control_request",
+      "bytes": "01",
+      "fields": {
+        "arg": null,
+        "opcode": 1
+      }
+    },
+    {
+      "name": "five hundred samples per second",
+      "kind": "control_request",
+      "bytes": "1005",
+      "fields": {
+        "arg": 5,
+        "opcode": 16
+      }
+    },
+    {
+      "name": "gain twenty four",
+      "kind": "control_request",
+      "bytes": "1106",
+      "fields": {
+        "arg": 6,
+        "opcode": 17
+      }
+    },
+    {
+      "name": "the internal test signal",
+      "kind": "control_request",
+      "bytes": "2001",
+      "fields": {
+        "arg": 1,
+        "opcode": 32
+      }
+    },
+    {
+      "name": "the synthetic signal",
+      "kind": "control_request",
+      "bytes": "2003",
+      "fields": {
+        "arg": 3,
+        "opcode": 32
+      }
+    },
+    {
+      "name": "ask the model's interval",
+      "kind": "control_request",
+      "bytes": "89",
+      "fields": {
+        "arg": null,
+        "opcode": 137
+      }
+    },
+    {
+      "name": "ask the device's name",
+      "kind": "control_request",
+      "bytes": "47",
+      "fields": {
+        "arg": null,
+        "opcode": 71
+      }
+    },
+    {
+      "name": "ask the time",
+      "kind": "control_request",
+      "bytes": "40",
+      "fields": {
+        "arg": null,
+        "opcode": 64
+      }
+    },
+    {
+      "name": "turn predictions on",
+      "kind": "control_request",
+      "bytes": "8001",
+      "fields": {
+        "arg": 1,
+        "opcode": 128
+      }
+    },
+    {
+      "name": "select the head in slot two",
+      "kind": "control_request",
+      "bytes": "8102",
+      "fields": {
+        "arg": 2,
+        "opcode": 129
+      }
+    },
+    {
+      "name": "read the lamp's level",
+      "kind": "control_request",
+      "bytes": "44",
+      "fields": {
+        "arg": null,
+        "opcode": 68
+      }
+    },
+    {
+      "name": "the lamp verbose",
+      "kind": "control_request",
+      "bytes": "4502",
+      "fields": {
+        "arg": 2,
+        "opcode": 69
+      }
+    },
+    {
+      "name": "identify for five seconds",
+      "kind": "control_request",
+      "bytes": "4605",
+      "fields": {
+        "arg": 5,
+        "opcode": 70
+      }
+    },
+    {
+      "name": "read the converter's registers",
+      "kind": "control_request",
+      "bytes": "34",
+      "fields": {
+        "arg": null,
+        "opcode": 52
+      }
+    },
+    {
+      "name": "send the window embedding and the tokens",
+      "kind": "control_request",
+      "bytes": "8703",
+      "fields": {
+        "arg": 3,
+        "opcode": 135
+      }
+    },
+    {
+      "name": "the device's time, in answer to a time request",
+      "kind": "control_response",
+      "bytes": "40000807060504030201",
+      "fields": {
+        "device_time": "72623859790382856",
+        "opcode": 64,
+        "status": 0
+      }
+    },
+    {
+      "name": "a rate change refused because the device is streaming",
+      "kind": "control_response",
+      "bytes": "1003",
+      "fields": {
+        "opcode": 16,
+        "status": 3,
+        "status_name": "busy"
+      }
+    },
+    {
+      "name": "1.4: a stream refused while USB power is present",
+      "kind": "control_response",
+      "bytes": "0107",
+      "fields": {
+        "opcode": 1,
+        "status": 7,
+        "status_name": "usb power"
+      }
+    },
+    {
+      "name": "the lamp's level, reserved",
+      "kind": "control_response",
+      "bytes": "440001",
+      "fields": {
+        "level": 1,
+        "level_name": "reserved",
+        "opcode": 68,
+        "status": 0
+      }
+    },
+    {
+      "name": "the converter's twenty four registers, an ADS1299 family part",
+      "kind": "converter_registers",
+      "bytes": "0100183c96d1e00060606060e1e1e1e1000000000000000f000000",
+      "fields": {
+        "count": 24,
+        "family": 1,
+        "family_name": "ads1299",
+        "first": 0,
+        "values": "3c96d1e00060606060e1e1e1e1000000000000000f000000"
+      }
+    },
+    {
+      "name": "the battery",
+      "kind": "battery_info",
+      "bytes": "800e3d01",
+      "fields": {
+        "battery_mv": 3712,
+        "battery_percent": 61,
+        "charger_state": 1
+      }
+    },
+    {
+      "name": "a device that rolled back to its previous firmware",
+      "kind": "boot_info",
+      "bytes": "0106010070110100",
+      "fields": {
+        "active_slot": 1,
+        "boot_count": 70000,
+        "boot_reason": 6,
+        "boot_reason_name": "rollback",
+        "slot_state": 1
+      }
+    },
+    {
+      "name": "three head slots: the built-in one empty, one good, one that failed its hash",
+      "kind": "list_heads",
+      "bytes": "0103000000000000000000000000000000000000000000000000000000000000010102000707070707070707666f637573000000000000000000000000000202000000000000000000000000000000000000000000000000000000000000000000000000a7c61680d9a202db0000000000000000",
+      "fields": {
+        "active_slot": 1,
+        "heads": [
+          {
+            "out_dim": 0,
+            "slot": 0,
+            "state": 0
+          },
+          {
+            "encoder_id": "a7c61680d9a202db",
+            "head_id": "0707070707070707",
+            "name": "focus",
+            "out_dim": 2,
+            "slot": 1,
+            "state": 1
+          },
+          {
+            "out_dim": 0,
+            "slot": 2,
+            "state": 2
+          }
+        ]
+      }
+    },
+    {
+      "name": "a model that is ready, with a head selected and predictions on, 1.3: a pass of 3150 ms, every window, a generator held",
+      "kind": "model_info",
+      "bytes": "02010100a7c61680d9a202db01000001144e0c000001",
+      "fields": {
+        "active_head": 1,
+        "encoder_id": "a7c61680d9a202db",
+        "generator": true,
+        "input_classes": 1,
+        "interval_s": 0,
+        "model_state": 2,
+        "pass_ms": 3150,
+        "predictions_on": 1,
+        "tokens_per_channel": 20
+      }
+    },
+    {
+      "name": "a 1.2 device's model information, which ends before the pass time",
+      "kind": "model_info",
+      "bytes": "02010100a7c61680d9a202db0100000114",
+      "fields": {
+        "active_head": 1,
+        "encoder_id": "a7c61680d9a202db",
+        "generator": false,
+        "input_classes": 1,
+        "interval_s": 0,
+        "model_state": 2,
+        "pass_ms": 0,
+        "predictions_on": 1,
+        "tokens_per_channel": 20
+      }
+    },
+    {
+      "name": "a 1.1 device's model information, which ends before the token count",
+      "kind": "model_info",
+      "bytes": "02010100a7c61680d9a202db01000001",
+      "fields": {
+        "active_head": 1,
+        "encoder_id": "a7c61680d9a202db",
+        "input_classes": 1,
+        "model_state": 2,
+        "predictions_on": 1,
+        "tokens_per_channel": 0
+      }
+    },
+    {
+      "name": "streaming, on USB, buffer above its watermark, two electrodes off",
+      "kind": "status",
+      "bytes": "01000605013d030307006c07",
+      "fields": {
+        "battery_percent": 61,
+        "buffer_fill": 1900,
+        "buffer_high_watermark": true,
+        "charger_state": 1,
+        "dropped_total": 7,
+        "gain_code": 6,
+        "loff_statp": 3,
+        "mode": 0,
+        "rate_code": 5,
+        "state": 1,
+        "streaming": true,
+        "usb_present": true
+      }
+    },
+    {
+      "name": "streaming the synthetic signal",
+      "kind": "status",
+      "bytes": "01030605013d000307006c07",
+      "fields": {
+        "battery_percent": 61,
+        "buffer_fill": 1900,
+        "buffer_high_watermark": true,
+        "charger_state": 1,
+        "dropped_total": 7,
+        "gain_code": 6,
+        "loff_statp": 0,
+        "mode": 3,
+        "rate_code": 5,
+        "state": 1,
+        "streaming": true,
+        "synthetic": true,
+        "usb_present": true
+      }
+    },
+    {
+      "name": "a device with no battery telemetry",
+      "kind": "status",
+      "bytes": "0100060501ff030307006c07",
+      "fields": {
+        "battery_percent": null,
+        "battery_percent_raw": 255
+      }
+    },
+    {
+      "name": "start carrying an application image",
+      "kind": "update_request",
+      "bytes": "0101000e630300abababababababab",
+      "fields": {
+        "op": 1,
+        "slot": 0,
+        "target": 1,
+        "total_len": 221966,
+        "transfer_id": "abababababababab"
+      }
+    },
+    {
+      "name": "the device wants the image built for its other slot, and has four kilobytes already",
+      "kind": "update_response",
+      "bytes": "010001f40000100000",
+      "fields": {
+        "chunk_max": 244,
+        "op": 1,
+        "resume_offset": 4096,
+        "status": 0,
+        "target_slot": 1
+      }
+    },
+    {
+      "name": "a transfer in progress, with the device's own checksum over what it has",
+      "kind": "update_response",
+      "bytes": "02000140e201002639f4cb",
+      "fields": {
+        "crc32": 3421780262,
+        "offset": 123456,
+        "op": 2,
+        "state": 1,
+        "status": 0
+      }
+    },
+    {
+      "name": "an image the device refused because its signature is not ours",
+      "kind": "update_response",
+      "bytes": "030606",
+      "fields": {
+        "op": 3,
+        "status": 6,
+        "verify_result": 6,
+        "verify_result_name": "signature"
+      }
+    },
+    {
+      "name": "the plain head of a wrapped weights image",
+      "kind": "envelope",
+      "bytes": "494d55500102ff014242424242424242424242424242424220ae070000000000",
+      "fields": {
+        "key_id": 1,
+        "plain_len": 503328,
+        "slot_link": 255,
+        "target": 2,
+        "total_len": 503360
+      }
+    },
+    {
+      "name": "three outputs from the head in slot two",
+      "kind": "prediction",
+      "bytes": "0202020340e20100ea16b04c02000000d007010203040506070800000000803e0000c0bf6f12833a",
+      "fields": {
+        "device_time": "9876543210",
+        "duty_reduced": true,
+        "gap_in_window": false,
+        "head_id": "0102030405060708",
+        "head_slot": 2,
+        "input_source": 0,
+        "leadoff_in_window": false,
+        "n_outputs": 3,
+        "outputs": [
+          0.25,
+          -1.5,
+          0.001
+        ],
+        "packet_type": 2,
+        "sample_index": 123456,
+        "window_samples": 2000
+      }
+    },
+    {
+      "name": "the window embedding of one window, ninety six values",
+      "kind": "embedding",
+      "bytes": "0304600040e20100ea16b04c02000000d007a7c61680d9a202db00ff40eda4ed08ee6ceed0ee34ef98effcef60f0c4f028f18cf1f0f154f2b8f21cf380f3e4f348f4acf410f574f5d8f53cf6a0f604f768f7ccf730f894f8f8f85cf9c0f924fa88faecfa50fbb4fb18fc7cfce0fc44fda8fd0cfe70fed4fe38ff9cff00006400c8002c019001f4015802bc0220038403e8034c04b00414057805dc054006a40608076c07d00734089808fc086009c409280a8c0af00a540bb80b1c0c800ce40c480dac0d100e740ed80e3c0fa00f04106810cc1030119411f8115c12",
+      "fields": {
+        "device_time": "9876543210",
+        "duty_reduced": false,
+        "embed_dim": 96,
+        "encoder_id": "a7c61680d9a202db",
+        "first": 0,
+        "gap_in_window": false,
+        "input_source": 0,
+        "is_window_embedding": true,
+        "leadoff_in_window": true,
+        "more_parts": false,
+        "packet_type": 3,
+        "sample_index": 123456,
+        "token": 255,
+        "values": [
+          -4800,
+          -4700,
+          -4600,
+          -4500,
+          -4400,
+          -4300,
+          -4200,
+          -4100,
+          -4000,
+          -3900,
+          -3800,
+          -3700,
+          -3600,
+          -3500,
+          -3400,
+          -3300,
+          -3200,
+          -3100,
+          -3000,
+          -2900,
+          -2800,
+          -2700,
+          -2600,
+          -2500,
+          -2400,
+          -2300,
+          -2200,
+          -2100,
+          -2000,
+          -1900,
+          -1800,
+          -1700,
+          -1600,
+          -1500,
+          -1400,
+          -1300,
+          -1200,
+          -1100,
+          -1000,
+          -900,
+          -800,
+          -700,
+          -600,
+          -500,
+          -400,
+          -300,
+          -200,
+          -100,
+          0,
+          100,
+          200,
+          300,
+          400,
+          500,
+          600,
+          700,
+          800,
+          900,
+          1000,
+          1100,
+          1200,
+          1300,
+          1400,
+          1500,
+          1600,
+          1700,
+          1800,
+          1900,
+          2000,
+          2100,
+          2200,
+          2300,
+          2400,
+          2500,
+          2600,
+          2700,
+          2800,
+          2900,
+          3000,
+          3100,
+          3200,
+          3300,
+          3400,
+          3500,
+          3600,
+          3700,
+          3800,
+          3900,
+          4000,
+          4100,
+          4200,
+          4300,
+          4400,
+          4500,
+          4600,
+          4700
+        ],
+        "window_samples": 2000
+      }
+    },
+    {
+      "name": "token seventeen of a wide model, its first hundred and eight values, more to follow",
+      "kind": "embedding",
+      "bytes": "0308800040e20100ea16b04c02000000d007a7c61680d9a202db0011000007000e0015001c0023002a00310038003f0046004d0054005b0062006900700077007e0085008c0093009a00a100a800af00b600bd00c400cb00d200d900e000e700ee00f500fc0003010a01110118011f0126012d0134013b0142014901500157015e0165016c0173017a01810188018f0196019d01a401ab01b201b901c001c701ce01d501dc01e301ea01f101f801ff0106020d0214021b0222022902300237023e0245024c0253025a02610268026f0276027d0284028b0292029902a002a702ae02b502bc02c302ca02d102d802df02e602ed02",
+      "fields": {
+        "embed_dim": 128,
+        "first": 0,
+        "is_window_embedding": false,
+        "leadoff_in_window": false,
+        "more_parts": true,
+        "packet_type": 3,
+        "sample_index": 123456,
+        "token": 17,
+        "values": [
+          0,
+          7,
+          14,
+          21,
+          28,
+          35,
+          42,
+          49,
+          56,
+          63,
+          70,
+          77,
+          84,
+          91,
+          98,
+          105,
+          112,
+          119,
+          126,
+          133,
+          140,
+          147,
+          154,
+          161,
+          168,
+          175,
+          182,
+          189,
+          196,
+          203,
+          210,
+          217,
+          224,
+          231,
+          238,
+          245,
+          252,
+          259,
+          266,
+          273,
+          280,
+          287,
+          294,
+          301,
+          308,
+          315,
+          322,
+          329,
+          336,
+          343,
+          350,
+          357,
+          364,
+          371,
+          378,
+          385,
+          392,
+          399,
+          406,
+          413,
+          420,
+          427,
+          434,
+          441,
+          448,
+          455,
+          462,
+          469,
+          476,
+          483,
+          490,
+          497,
+          504,
+          511,
+          518,
+          525,
+          532,
+          539,
+          546,
+          553,
+          560,
+          567,
+          574,
+          581,
+          588,
+          595,
+          602,
+          609,
+          616,
+          623,
+          630,
+          637,
+          644,
+          651,
+          658,
+          665,
+          672,
+          679,
+          686,
+          693,
+          700,
+          707,
+          714,
+          721,
+          728,
+          735,
+          742,
+          749
+        ]
+      }
+    },
+    {
+      "name": "the same token's last twenty values, completing it",
+      "kind": "embedding",
+      "bytes": "0300806c40e20100ea16b04c02000000d007a7c61680d9a202db00110000fffffefffdfffcfffbfffafff9fff8fff7fff6fff5fff4fff3fff2fff1fff0ffefffeeffedff",
+      "fields": {
+        "embed_dim": 128,
+        "first": 108,
+        "more_parts": false,
+        "packet_type": 3,
+        "token": 17,
+        "values": [
+          0,
+          -1,
+          -2,
+          -3,
+          -4,
+          -5,
+          -6,
+          -7,
+          -8,
+          -9,
+          -10,
+          -11,
+          -12,
+          -13,
+          -14,
+          -15,
+          -16,
+          -17,
+          -18,
+          -19
+        ]
+      }
+    },
+    {
+      "name": "the catalog of a device that runs the three filter kinds",
+      "kind": "pipeline_catalog",
+      "bytes": "03010001016869676870617373020001016c6f777061737300030002086e6f746368000000",
+      "fields": {
+        "kinds": [
+          {
+            "class": 0,
+            "kind": 1,
+            "max_instances": 1,
+            "n_params": 1,
+            "name": "highpass"
+          },
+          {
+            "class": 0,
+            "kind": 2,
+            "max_instances": 1,
+            "n_params": 1,
+            "name": "lowpass"
+          },
+          {
+            "class": 0,
+            "kind": 3,
+            "max_instances": 8,
+            "n_params": 2,
+            "name": "notch"
+          }
+        ]
+      }
+    },
+    {
+      "name": "the default chain at 500 samples per second",
+      "kind": "chain",
+      "bytes": "08010105000302e00108020302d403fc030302c805f005030244026c0203029c04c4040302f4061c0702010000",
+      "fields": {
+        "stages": [
+          {
+            "kind": 1,
+            "params": [
+              5
+            ]
+          },
+          {
+            "kind": 3,
+            "params": [
+              480,
+              520
+            ]
+          },
+          {
+            "kind": 3,
+            "params": [
+              980,
+              1020
+            ]
+          },
+          {
+            "kind": 3,
+            "params": [
+              1480,
+              1520
+            ]
+          },
+          {
+            "kind": 3,
+            "params": [
+              580,
+              620
+            ]
+          },
+          {
+            "kind": 3,
+            "params": [
+              1180,
+              1220
+            ]
+          },
+          {
+            "kind": 3,
+            "params": [
+              1780,
+              1820
+            ]
+          },
+          {
+            "kind": 2,
+            "params": [
+              0
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "name": "the natural signal: an empty chain",
+      "kind": "chain",
+      "bytes": "00",
+      "fields": {
+        "stages": []
+      }
+    },
+    {
+      "name": "the chain in force, set by a host",
+      "kind": "pipeline_state",
+      "bytes": "0108010105000302e00108020302d403fc030302c805f005030244026c0203029c04c4040302f4061c0702010000",
+      "fields": {
+        "origin": 1,
+        "stages": [
+          {
+            "kind": 1,
+            "params": [
+              5
+            ]
+          },
+          {
+            "kind": 3,
+            "params": [
+              480,
+              520
+            ]
+          },
+          {
+            "kind": 3,
+            "params": [
+              980,
+              1020
+            ]
+          },
+          {
+            "kind": 3,
+            "params": [
+              1480,
+              1520
+            ]
+          },
+          {
+            "kind": 3,
+            "params": [
+              580,
+              620
+            ]
+          },
+          {
+            "kind": 3,
+            "params": [
+              1180,
+              1220
+            ]
+          },
+          {
+            "kind": 3,
+            "params": [
+              1780,
+              1820
+            ]
+          },
+          {
+            "kind": 2,
+            "params": [
+              0
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "name": "the chain in force, the device's default",
+      "kind": "pipeline_state",
+      "bytes": "0008010105000302e00108020302d403fc030302c805f005030244026c0203029c04c4040302f4061c0702010000",
+      "fields": {
+        "origin": 0,
+        "stages": [
+          {
+            "kind": 1,
+            "params": [
+              5
+            ]
+          },
+          {
+            "kind": 3,
+            "params": [
+              480,
+              520
+            ]
+          },
+          {
+            "kind": 3,
+            "params": [
+              980,
+              1020
+            ]
+          },
+          {
+            "kind": 3,
+            "params": [
+              1480,
+              1520
+            ]
+          },
+          {
+            "kind": 3,
+            "params": [
+              580,
+              620
+            ]
+          },
+          {
+            "kind": 3,
+            "params": [
+              1180,
+              1220
+            ]
+          },
+          {
+            "kind": 3,
+            "params": [
+              1780,
+              1820
+            ]
+          },
+          {
+            "kind": 2,
+            "params": [
+              0
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "name": "the model fed by a chain of its own",
+      "kind": "prediction_input",
+      "bytes": "020101010a00",
+      "fields": {
+        "source": 2,
+        "stages": [
+          {
+            "kind": 1,
+            "params": [
+              10
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "name": "the model fed by the stream, as the device reports it",
+      "kind": "prediction_input",
+      "bytes": "0008010105000302e00108020302d403fc030302c805f005030244026c0203029c04c4040302f4061c0702010000",
+      "fields": {
+        "source": 0,
+        "stages": [
+          {
+            "kind": 1,
+            "params": [
+              5
+            ]
+          },
+          {
+            "kind": 3,
+            "params": [
+              480,
+              520
+            ]
+          },
+          {
+            "kind": 3,
+            "params": [
+              980,
+              1020
+            ]
+          },
+          {
+            "kind": 3,
+            "params": [
+              1480,
+              1520
+            ]
+          },
+          {
+            "kind": 3,
+            "params": [
+              580,
+              620
+            ]
+          },
+          {
+            "kind": 3,
+            "params": [
+              1180,
+              1220
+            ]
+          },
+          {
+            "kind": 3,
+            "params": [
+              1780,
+              1820
+            ]
+          },
+          {
+            "kind": 2,
+            "params": [
+              0
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "name": "the model fed by the natural signal",
+      "kind": "prediction_input",
+      "bytes": "0100",
+      "fields": {
+        "source": 1,
+        "stages": []
+      }
+    },
+    {
+      "name": "the bias output measured",
+      "kind": "bias_diagnostic",
+      "bytes": "f4ff0300d8ff1900",
+      "fields": {
+        "max_mv": 25,
+        "mean_mv": -12,
+        "min_mv": -40,
+        "sd_mv": 3
+      }
+    },
+    {
+      "name": "set the chain to one high-pass",
+      "kind": "control_request",
+      "bytes": "920101010a00",
+      "fields": {
+        "arg": null,
+        "opcode": 146,
+        "stages": [
+          {
+            "kind": 1,
+            "params": [
+              10
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "name": "one window every thirty seconds",
+      "kind": "control_request",
+      "bytes": "881e00",
+      "fields": {
+        "arg": null,
+        "interval_s": 30,
+        "opcode": 136
+      }
+    },
+    {
+      "name": "name the device Ada's Blue",
+      "kind": "control_request",
+      "bytes": "480341646104426c7565",
+      "fields": {
+        "adjective": "Blue",
+        "arg": null,
+        "name": "Ada",
+        "opcode": 72
+      }
+    },
+    {
+      "name": "clear the name and the adjective",
+      "kind": "control_request",
+      "bytes": "480000",
+      "fields": {
+        "adjective": "",
+        "arg": null,
+        "name": "",
+        "opcode": 72
+      }
+    },
+    {
+      "name": "the model's interval: thirty seconds in force, four the least",
+      "kind": "control_response",
+      "bytes": "89001e000400",
+      "fields": {
+        "interval_s": 30,
+        "minimum_s": 4,
+        "opcode": 137,
+        "status": 0
+      }
+    },
+    {
+      "name": "the device's name: Ada, Blue",
+      "kind": "control_response",
+      "bytes": "47000341646104426c7565",
+      "fields": {
+        "adjective": "Blue",
+        "name": "Ada",
+        "opcode": 71,
+        "status": 0
+      }
+    },
+    {
+      "name": "an interval below the least the device keeps, refused",
+      "kind": "control_response",
+      "bytes": "8801",
+      "fields": {
+        "opcode": 136,
+        "status": 1
+      }
+    },
+    {
+      "name": "feed the model the natural signal",
+      "kind": "control_request",
+      "bytes": "850100",
+      "fields": {
+        "arg": null,
+        "opcode": 133,
+        "source": 1,
+        "stages": []
+      }
+    },
+    {
+      "name": "ask for the catalog",
+      "kind": "control_request",
+      "bytes": "90",
+      "fields": {
+        "arg": null,
+        "opcode": 144
+      }
+    },
+    {
+      "name": "ask for the chain",
+      "kind": "control_request",
+      "bytes": "91",
+      "fields": {
+        "arg": null,
+        "opcode": 145
+      }
+    },
+    {
+      "name": "clear the chain",
+      "kind": "control_request",
+      "bytes": "93",
+      "fields": {
+        "arg": null,
+        "opcode": 147
+      }
+    },
+    {
+      "name": "restore the default chain",
+      "kind": "control_request",
+      "bytes": "94",
+      "fields": {
+        "arg": null,
+        "opcode": 148
+      }
+    },
+    {
+      "name": "ask where the model's input comes from",
+      "kind": "control_request",
+      "bytes": "86",
+      "fields": {
+        "arg": null,
+        "opcode": 134
+      }
+    },
+    {
+      "name": "turn the bias drive on",
+      "kind": "control_request",
+      "bytes": "3201",
+      "fields": {
+        "arg": 1,
+        "opcode": 50
+      }
+    },
+    {
+      "name": "ask for the bias diagnostic",
+      "kind": "control_request",
+      "bytes": "33",
+      "fields": {
+        "arg": null,
+        "opcode": 51
+      }
+    },
+    {
+      "name": "a head of four inputs and two outputs, hashed",
+      "kind": "head",
+      "bytes": "494d4844010104000200666f637573000000000000000000000000000000000001fe03040506f9080a000000ecffffff0000003f00000040e31161503ac2c0f59781fc475f44901459a65c970a0e7ef5082e72fd9a61bd90",
+      "fields": {
+        "bias": [
+          10,
+          -20
+        ],
+        "head_id": "e31161503ac2c0f5",
+        "in_dim": 4,
+        "kind": 1,
+        "name": "focus",
+        "out_dim": 2,
+        "outputs_for_embedding": {
+          "embedding": [
+            100,
+            -100,
+            50,
+            -50
+          ],
+          "outputs": [
+            130.0,
+            -1740.0
+          ]
+        },
+        "scale": [
+          0.5,
+          2.0
+        ],
+        "weights": [
+          [
+            1,
+            -2,
+            3,
+            4
+          ],
+          [
+            5,
+            6,
+            -7,
+            8
+          ]
+        ]
+      }
+    }
+  ],
+  "refuse": [
+    {
+      "name": "device info claiming a length below the one this version defines",
+      "kind": "device_info",
+      "bytes": "0104010400041840420f0020aa4400edf70700a0a1a2a3a4a5a6a73c0101070001020304050607086000f401d00704200010f40000700400002006000000000000000000000000000000000003000000",
+      "reason": "invalid"
+    },
+    {
+      "name": "device info that ends inside its own fields",
+      "kind": "device_info",
+      "bytes": "0104010400041840420f0020aa4400edf70700a0a1a2a3a4a5a6a750010107000102030405060708",
+      "reason": "truncated"
+    },
+    {
+      "name": "a packet whose payload is one byte short of its own sample count",
+      "kind": "eeg_data",
+      "bytes": "01160000efbeaddeefcdab896745230102050605000001ffffff8000007fffff0003e80003e90003ea0003",
+      "reason": "truncated"
+    },
+    {
+      "name": "a packet with a gain code the contract does not define",
+      "kind": "eeg_data",
+      "bytes": "01160000efbeaddeefcdab896745230102050705000001ffffff8000007fffff0003e80003e90003ea0003eb",
+      "reason": "invalid"
+    },
+    {
+      "name": "a packet type that is not a packet type",
+      "kind": "eeg_data",
+      "bytes": "09160000efbeaddeefcdab896745230102050605000001ffffff8000007fffff0003e80003e90003ea0003eb",
+      "reason": "invalid"
+    },
+    {
+      "name": "a rate request with no rate",
+      "kind": "control_request",
+      "bytes": "10",
+      "reason": "invalid"
+    },
+    {
+      "name": "a start request with an argument it does not take",
+      "kind": "control_request",
+      "bytes": "0100",
+      "reason": "invalid"
+    },
+    {
+      "name": "an opcode that does not exist",
+      "kind": "control_request",
+      "bytes": "99",
+      "reason": "invalid"
+    },
+    {
+      "name": "an empty write",
+      "kind": "control_request",
+      "bytes": "",
+      "reason": "truncated"
+    },
+    {
+      "name": "a number an earlier firmware used",
+      "kind": "control_request",
+      "bytes": "70",
+      "reason": "reserved"
+    },
+    {
+      "name": "a number reserved for factory builds",
+      "kind": "control_request",
+      "bytes": "60",
+      "reason": "reserved"
+    },
+    {
+      "name": "a level request with no level",
+      "kind": "control_request",
+      "bytes": "45",
+      "reason": "invalid"
+    },
+    {
+      "name": "a registers request with an argument it does not take",
+      "kind": "control_request",
+      "bytes": "3400",
+      "reason": "invalid"
+    },
+    {
+      "name": "an answer that is only an opcode",
+      "kind": "control_response",
+      "bytes": "40",
+      "reason": "truncated"
+    },
+    {
+      "name": "registers whose count disagrees with the bytes",
+      "kind": "converter_registers",
+      "bytes": "0100183c96d1e00060606060e1e1e1e1000000000000000f0000",
+      "reason": "invalid"
+    },
+    {
+      "name": "registers cut before their count",
+      "kind": "converter_registers",
+      "bytes": "0100",
+      "reason": "truncated"
+    },
+    {
+      "name": "a battery reading one byte short",
+      "kind": "battery_info",
+      "bytes": "800e3d",
+      "reason": "truncated"
+    },
+    {
+      "name": "boot information that ends before its count",
+      "kind": "boot_info",
+      "bytes": "01060100701101",
+      "reason": "truncated"
+    },
+    {
+      "name": "a head list that is only its active slot",
+      "kind": "list_heads",
+      "bytes": "01",
+      "reason": "truncated"
+    },
+    {
+      "name": "a head list one byte shorter than the count it declares",
+      "kind": "list_heads",
+      "bytes": "0103000000000000000000000000000000000000000000000000000000000000010102000707070707070707666f637573000000000000000000000000000202000000000000000000000000000000000000000000000000000000000000000000000000a7c61680d9a202db00000000000000",
+      "reason": "invalid"
+    },
+    {
+      "name": "model information one byte short of the 1.1 form",
+      "kind": "model_info",
+      "bytes": "02010100a7c61680d9a202db010000",
+      "reason": "truncated"
+    },
+    {
+      "name": "status one byte short of its fields",
+      "kind": "status",
+      "bytes": "01000605013d030307006c",
+      "reason": "truncated"
+    },
+    {
+      "name": "an update answer that is only an operation",
+      "kind": "update_response",
+      "bytes": "01",
+      "reason": "truncated"
+    },
+    {
+      "name": "an empty update answer",
+      "kind": "update_response",
+      "bytes": "",
+      "reason": "truncated"
+    },
+    {
+      "name": "an update operation this contract does not define",
+      "kind": "update_response",
+      "bytes": "0900",
+      "reason": "invalid"
+    },
+    {
+      "name": "an update status this contract does not define",
+      "kind": "update_response",
+      "bytes": "0109",
+      "reason": "invalid"
+    },
+    {
+      "name": "a weights envelope that names a slot, which weights do not have",
+      "kind": "envelope",
+      "bytes": "494d5550010200014242424242424242424242424242424220ae070000000000",
+      "reason": "invalid"
+    },
+    {
+      "name": "an envelope that does not begin with this contract's mark",
+      "kind": "envelope",
+      "bytes": "584d55500102ff014242424242424242424242424242424220ae070000000000",
+      "reason": "invalid"
+    },
+    {
+      "name": "an envelope carrying something this contract does not transfer",
+      "kind": "envelope",
+      "bytes": "494d55500109ff014242424242424242424242424242424220ae070000000000",
+      "reason": "invalid"
+    },
+    {
+      "name": "an envelope one byte short",
+      "kind": "envelope",
+      "bytes": "494d55500102ff014242424242424242424242424242424220ae0700000000",
+      "reason": "truncated"
+    },
+    {
+      "name": "a prediction that ends inside its header",
+      "kind": "prediction",
+      "bytes": "0202020340e20100ea16b04c02000000d007010203040506070800",
+      "reason": "truncated"
+    },
+    {
+      "name": "a prediction carrying fewer outputs than it declares",
+      "kind": "prediction",
+      "bytes": "0202020340e20100ea16b04c02000000d007010203040506070800000000803e0000c0bf6f1283",
+      "reason": "truncated"
+    },
+    {
+      "name": "sample data arriving where a prediction is expected",
+      "kind": "prediction",
+      "bytes": "0102020340e20100ea16b04c02000000d007010203040506070800000000803e0000c0bf6f12833a",
+      "reason": "invalid"
+    },
+    {
+      "name": "an embedding that ends inside its header",
+      "kind": "embedding",
+      "bytes": "0304600040e20100ea16b04c02000000d007a7c61680d9a202db00",
+      "reason": "truncated"
+    },
+    {
+      "name": "an embedding cut in the middle of a value",
+      "kind": "embedding",
+      "bytes": "0304600040e20100ea16b04c02000000d007a7c61680d9a202db00ff40eda4ed08ee6ceed0ee34ef98effcef60f0c4f028f18cf1f0f154f2b8f21cf380f3e4f348f4acf410f574f5d8f53cf6a0f604f768f7ccf730f894f8f8f85cf9c0f924fa88faecfa50fbb4fb18fc7cfce0fc44fda8fd0cfe70fed4fe38ff9cff00006400c8002c019001f4015802bc0220038403e8034c04b00414057805dc054006a40608076c07d00734089808fc086009c409280a8c0af00a540bb80b1c0c800ce40c480dac0d100e740ed80e3c0fa00f04106810cc1030119411f8115c",
+      "reason": "truncated"
+    },
+    {
+      "name": "values that would run past the vector they belong to",
+      "kind": "embedding",
+      "bytes": "0304600140e20100ea16b04c02000000d007a7c61680d9a202db00ff40eda4ed08ee6ceed0ee34ef98effcef60f0c4f028f18cf1f0f154f2b8f21cf380f3e4f348f4acf410f574f5d8f53cf6a0f604f768f7ccf730f894f8f8f85cf9c0f924fa88faecfa50fbb4fb18fc7cfce0fc44fda8fd0cfe70fed4fe38ff9cff00006400c8002c019001f4015802bc0220038403e8034c04b00414057805dc054006a40608076c07d00734089808fc086009c409280a8c0af00a540bb80b1c0c800ce40c480dac0d100e740ed80e3c0fa00f04106810cc1030119411f8115c12",
+      "reason": "invalid"
+    },
+    {
+      "name": "a prediction arriving where an embedding is expected",
+      "kind": "embedding",
+      "bytes": "0204600040e20100ea16b04c02000000d007a7c61680d9a202db00ff40eda4ed08ee6ceed0ee34ef98effcef60f0c4f028f18cf1f0f154f2b8f21cf380f3e4f348f4acf410f574f5d8f53cf6a0f604f768f7ccf730f894f8f8f85cf9c0f924fa88faecfa50fbb4fb18fc7cfce0fc44fda8fd0cfe70fed4fe38ff9cff00006400c8002c019001f4015802bc0220038403e8034c04b00414057805dc054006a40608076c07d00734089808fc086009c409280a8c0af00a540bb80b1c0c800ce40c480dac0d100e740ed80e3c0fa00f04106810cc1030119411f8115c12",
+      "reason": "invalid"
+    },
+    {
+      "name": "a catalog that ends inside a record",
+      "kind": "pipeline_catalog",
+      "bytes": "03010001016869676870617373020001016c6f777061737300030002086e6f7463680000",
+      "reason": "invalid"
+    },
+    {
+      "name": "an empty catalog answer",
+      "kind": "pipeline_catalog",
+      "bytes": "",
+      "reason": "truncated"
+    },
+    {
+      "name": "a chain that says two stages and carries one",
+      "kind": "chain",
+      "bytes": "0201010500",
+      "reason": "truncated"
+    },
+    {
+      "name": "a stage of kind zero",
+      "kind": "chain",
+      "bytes": "010000",
+      "reason": "invalid"
+    },
+    {
+      "name": "a stage with more parameters than any kind takes",
+      "kind": "chain",
+      "bytes": "01010500000000000000000000",
+      "reason": "invalid"
+    },
+    {
+      "name": "more stages than a chain can hold",
+      "kind": "chain",
+      "bytes": "0d",
+      "reason": "invalid"
+    },
+    {
+      "name": "bytes after the last stage",
+      "kind": "chain",
+      "bytes": "0007",
+      "reason": "invalid"
+    },
+    {
+      "name": "an origin the contract does not define",
+      "kind": "pipeline_state",
+      "bytes": "0200",
+      "reason": "invalid"
+    },
+    {
+      "name": "a source the contract does not define",
+      "kind": "prediction_input",
+      "bytes": "0300",
+      "reason": "invalid"
+    },
+    {
+      "name": "a bias diagnostic one byte short",
+      "kind": "bias_diagnostic",
+      "bytes": "f4ff0300d8ff19",
+      "reason": "truncated"
+    },
+    {
+      "name": "an interval request one byte short",
+      "kind": "control_request",
+      "bytes": "881e",
+      "reason": "invalid"
+    },
+    {
+      "name": "a name request that ends inside its name",
+      "kind": "control_request",
+      "bytes": "48034164",
+      "reason": "invalid"
+    },
+    {
+      "name": "a bias request with no mode",
+      "kind": "control_request",
+      "bytes": "32",
+      "reason": "invalid"
+    },
+    {
+      "name": "a chain request with an argument it does not take",
+      "kind": "control_request",
+      "bytes": "9100",
+      "reason": "invalid"
+    },
+    {
+      "name": "a head that ends inside its own header",
+      "kind": "head",
+      "bytes": "494d4844010104000200666f637573000000000000000000000000000000000001fe03040506f908",
+      "reason": "truncated"
+    },
+    {
+      "name": "a head one byte shorter than the shape it declares",
+      "kind": "head",
+      "bytes": "494d4844010104000200666f637573000000000000000000000000000000000001fe03040506f9080a000000ecffffff0000003f00000040e31161503ac2c0f59781fc475f44901459a65c970a0e7ef5082e72fd9a61bd",
+      "reason": "invalid"
+    },
+    {
+      "name": "a head that does not begin with this contract's mark",
+      "kind": "head",
+      "bytes": "584d4844010104000200666f637573000000000000000000000000000000000001fe03040506f9080a000000ecffffff0000003f00000040e31161503ac2c0f59781fc475f44901459a65c970a0e7ef5082e72fd9a61bd90",
+      "reason": "invalid"
+    },
+    {
+      "name": "a head of a kind this contract does not define",
+      "kind": "head",
+      "bytes": "494d4844010204000200666f637573000000000000000000000000000000000001fe03040506f9080a000000ecffffff0000003f00000040e31161503ac2c0f59781fc475f44901459a65c970a0e7ef5082e72fd9a61bd90",
+      "reason": "invalid"
+    },
+    {
+      "name": "a head whose weights changed after it was hashed",
+      "kind": "head",
+      "bytes": "494d4844010104000200666f637573000000000000000000000000000000000000fe03040506f9080a000000ecffffff0000003f00000040e31161503ac2c0f59781fc475f44901459a65c970a0e7ef5082e72fd9a61bd90",
+      "reason": "invalid"
+    }
+  ],
+  "scaling": [
+    {
+      "raw": 1,
+      "adc_bits": 24,
+      "gain": 24,
+      "vref_uv": 4500000.0,
+      "microvolts": 0.022351741790771484
+    },
+    {
+      "raw": -1,
+      "adc_bits": 24,
+      "gain": 24,
+      "vref_uv": 4500000.0,
+      "microvolts": -0.022351741790771484
+    },
+    {
+      "raw": 8388607,
+      "adc_bits": 24,
+      "gain": 24,
+      "vref_uv": 4500000.0,
+      "microvolts": 187499.9776482582
+    },
+    {
+      "raw": -8388608,
+      "adc_bits": 24,
+      "gain": 1,
+      "vref_uv": 4500000.0,
+      "microvolts": -4500000.0
+    },
+    {
+      "raw": 12345,
+      "adc_bits": 24,
+      "gain": 6,
+      "vref_uv": 4500000.0,
+      "microvolts": 1103.729009628296
+    }
+  ],
+  "continuity": [
+    {
+      "prev_index": 100,
+      "prev_n_samples": 5,
+      "new_index": 105,
+      "discontinuity_flag": false,
+      "verdict": "continuous",
+      "lost": 0
+    },
+    {
+      "prev_index": 100,
+      "prev_n_samples": 5,
+      "new_index": 108,
+      "discontinuity_flag": false,
+      "verdict": "gap",
+      "lost": 3
+    },
+    {
+      "prev_index": 4294967292,
+      "prev_n_samples": 5,
+      "new_index": 3,
+      "discontinuity_flag": false,
+      "verdict": "gap",
+      "lost": 2
+    },
+    {
+      "prev_index": 1000,
+      "prev_n_samples": 5,
+      "new_index": 0,
+      "discontinuity_flag": true,
+      "verdict": "break",
+      "lost": null
+    },
+    {
+      "prev_index": 1000,
+      "prev_n_samples": 5,
+      "new_index": 1005,
+      "discontinuity_flag": true,
+      "verdict": "break",
+      "lost": null
+    },
+    {
+      "prev_index": 1000,
+      "prev_n_samples": 5,
+      "new_index": 900,
+      "discontinuity_flag": false,
+      "verdict": "break",
+      "lost": null
+    }
+  ],
+  "embedding": [
+    {
+      "floats": [
+        0.0,
+        1.0,
+        -1.0,
+        0.00024414062
+      ],
+      "integers": [
+        0,
+        4096,
+        -4096,
+        1
+      ]
+    },
+    {
+      "floats": [
+        100.0,
+        -100.0,
+        0.5,
+        -0.5
+      ],
+      "integers": [
+        32767,
+        -32768,
+        2048,
+        -2048
+      ]
+    }
+  ]
+}
