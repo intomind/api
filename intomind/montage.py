@@ -143,6 +143,7 @@ def validate(m: dict) -> None:
 
 
 def channel_count(m: dict | None) -> int:
+    """How many channels this montage has, 0 if it names none."""
     return len(((m or {}).get("channels")) or [])
 
 

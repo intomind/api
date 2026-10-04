@@ -51,6 +51,8 @@ MAX_TRUSTED_SKEW_PPM = 5000.0
 
 @dataclass
 class Capture:
+    """One recording, loaded into memory: raw ADC counts with their sample
+    index and host timestamps, and the manifest that explains them."""
     label: str
     counts: np.ndarray          # (nch, n) int64 ADC counts
     index: np.ndarray
@@ -104,9 +106,11 @@ class Capture:
 
     @property
     def nch(self) -> int:
+        """The number of channels this capture holds."""
         return self.counts.shape[0]
 
     def uv(self, c: int) -> np.ndarray:
+        """Channel `c`'s counts, converted to microvolts."""
         return self.counts[c].astype(np.float64) * self.lsb_uv
 
 
@@ -381,6 +385,9 @@ def inputs(label: str, *, kinds=("button", "axis")) -> list[dict]:
 
 
 def contiguous_runs(index: np.ndarray, minlen: int) -> list[tuple[int, int]]:
+    """The (start, end) position bounds of each run in `index` that climbs
+    by exactly one sample with no break, kept only if at least `minlen`
+    samples long."""
     brk = np.where(np.diff(index) != 1)[0]
     e = np.concatenate(([0], brk + 1, [len(index)]))
     return [(a, b) for a, b in zip(e[:-1], e[1:]) if b - a >= minlen]
@@ -488,6 +495,10 @@ def summary(label: str, line_hz: float = 60.0, nperseg: int = 2048,
 def psd_curve(label: str, filtered=False, fmax=100.0, nperseg=2048,
               hp=DEFAULTS["hp"], lp=DEFAULTS["lp"], notch=DEFAULTS["notch"],
               notch_q=DEFAULTS["notch_q"]) -> dict:
+    """Welch PSD for every channel of one capture, up to `fmax` Hz, on the
+    filtered signal if `filtered` is true and on the raw signal otherwise.
+    Returns the curves together with the summary row `compare` also
+    returns for each capture it overlays."""
     cap = load(label)
     curves = []
     kw = dict(hp=hp, lp=lp, notch=notch, notch_q=notch_q) if filtered else {}

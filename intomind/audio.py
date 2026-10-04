@@ -55,6 +55,8 @@ def _wav(name: str) -> pathlib.Path | None:
 
 
 def available() -> dict:
+    """The tone names this module can play, and whether this host can
+    actually play a tone or speak text."""
     return dict(tones=CHOICES,
                 aplay=bool(shutil.which("aplay")),
                 speech=bool(shutil.which("spd-say")))

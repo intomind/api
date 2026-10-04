@@ -46,6 +46,7 @@ class WeightsError(Exception):
 
 @dataclass(frozen=True)
 class Header:
+    """The shape of one encoder, read from its weights file header."""
     layers: int
     d_model: int
     d_ff: int
@@ -57,10 +58,14 @@ class Header:
 
     @property
     def window_samples(self) -> int:
+        """How many samples of one channel this encoder reads per
+        window."""
         return self.patch * self.tokens
 
     @property
     def d_head(self) -> int:
+        """The width of one attention head: `d_model` divided by
+        `heads`."""
         return self.d_model // self.heads
 
 
@@ -294,10 +299,12 @@ class Reconstructor:
 
     @property
     def d_model(self) -> int:
+        """The width of the token this head reads."""
         return self.weights.shape[1]
 
     @property
     def patch(self) -> int:
+        """How many samples this head writes for each token."""
         return self.weights.shape[0]
 
     #: The encoder the shipped reconstruction head decodes, by the id every
@@ -318,6 +325,7 @@ class Reconstructor:
 
     @classmethod
     def load(cls, source) -> "Reconstructor":
+        """From a path, or from the bytes themselves."""
         if isinstance(source, (bytes, bytearray, memoryview)):
             blob = bytes(source)
         else:

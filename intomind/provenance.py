@@ -150,6 +150,8 @@ MANIFEST_VERSION = 6
 
 # ---------------------------------------------------------------- hashing
 def sha256_file(path: pathlib.Path, chunk: int = 1 << 20) -> str:
+    """The sha256 hex digest of the file at `path`, read in pieces of
+    `chunk` bytes."""
     h = hashlib.sha256()
     with open(path, "rb") as f:
         while True:
@@ -161,6 +163,7 @@ def sha256_file(path: pathlib.Path, chunk: int = 1 << 20) -> str:
 
 
 def checksum_path(label: str) -> pathlib.Path:
+    """The path of a capture's checksum file."""
     return capture_path(label, ".sha256")
 
 
@@ -178,6 +181,8 @@ def write_checksums(label: str) -> dict[str, str]:
 
 
 def aborted_reason(label: str) -> str | None:
+    """Why a capture's run was aborted, or None if it was not (or its
+    manifest cannot be read)."""
     m = capture_path(label, ".meta.json")
     if not m.exists():
         return None
@@ -394,6 +399,8 @@ def _git(*args: str) -> str | None:
 
 
 def git_state() -> dict:
+    """The commit and dirty state of the repository `use_repo` declared,
+    or nulls if none was."""
     commit = _git("rev-parse", "HEAD")
     status = _git("status", "--porcelain")
     return dict(git_commit=commit,
@@ -401,6 +408,8 @@ def git_state() -> dict:
 
 
 def host_versions() -> dict:
+    """The Python version, the platform, and the installed version of
+    numpy, scipy and bleak."""
     def ver(mod):
         try:
             return __import__(mod).__version__
@@ -634,6 +643,10 @@ def signal_source_of(packets) -> dict:
 def build_manifest(*, label, dev, packets, regs_before, regs_after,
                    protocol, params, extra, index, device_ticks=None,
                    gaps_in_run=0, config_after=None) -> dict:
+    """Assemble a capture's manifest: the device and its firmware, the
+    montage, what the samples were and their quality, the declared site
+    and software context, and `extra`'s own fields. A field already
+    measured from the packets is never overwritten by a None in `extra`."""
     s = site()
     # WHERE THE ELECTRODES WERE PUT, if the caller knows. Taken out of `extra`
     # rather than added as arguments so that every existing caller keeps
@@ -741,6 +754,8 @@ def build_manifest(*, label, dev, packets, regs_before, regs_after,
 
 
 def append_session(manifest: dict) -> None:
+    """Append a one-line summary of `manifest` to the session log at
+    `SESSIONS`."""
     CAPTURES.mkdir(exist_ok=True)
     row = {k: manifest.get(k) for k in
            ("label", "started_utc", "finished_utc", "protocol_id",

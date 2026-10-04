@@ -88,11 +88,16 @@ class Session:
                  int(s.synthetic)])
 
     async def start_all(self, **kw):
+        """Start streaming on every connected device, passing `kw` to each
+        one's `start`. A device with no `on_sample` of its own writes to
+        the file `record_to` opened."""
         for d in self.devices:
             d.on_sample = d.on_sample or self._sink
             await d.start(**kw)
 
     async def stop_all(self):
+        """Stop streaming on every connected device, and flush the
+        recording file if one is open."""
         for d in self.devices:
             await d.stop()
         if self._file:
@@ -109,5 +114,6 @@ class Session:
                     pass
 
     async def close(self):
+        """Disconnect every connected device."""
         for d in self.devices:
             await d.disconnect()

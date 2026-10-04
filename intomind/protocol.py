@@ -1,4 +1,4 @@
-"""The IntoMind BLE protocol, version 1.1.
+"""The IntoMind BLE protocol, version 1.4.
 
 This module is the wire and nothing else. It has no device in it, no
 transport, no state, and no opinion about what a caller does with a
@@ -232,24 +232,33 @@ def decode_request(data: bytes) -> tuple[str, int | bytes | None]:
 
 @dataclass(frozen=True)
 class Response:
+    """One answer to a control request: an opcode, a status, and whatever
+    payload goes with it."""
     opcode: int
     status: int
     payload: bytes
 
     @property
     def name(self) -> str | None:
+        """The name of the opcode this responds to, or None if the
+        contract does not define it."""
         return NAME_BY_OPCODE.get(self.opcode)
 
     @property
     def ok(self) -> bool:
+        """Whether the request succeeded (status 0)."""
         return self.status == 0
 
     @property
     def status_name(self) -> str:
+        """The status in words, or "undefined status N" if the contract
+        does not define it."""
         return STATUS_CODES.get(self.status, f"undefined status {self.status}")
 
 
 def decode_response(data: bytes) -> Response:
+    """One Control Response message, decoded into a `Response`. Raises
+    Truncated if `data` is under two bytes."""
     if len(data) < 2:
         raise Truncated("a response is at least an opcode and a status")
     return Response(data[0], data[1], bytes(data[2:]))
@@ -364,24 +373,32 @@ class DeviceInfo:
 
     @property
     def protocol_string(self) -> str:
+        """The protocol version as "major.minor"."""
         return f"{self.protocol[0]}.{self.protocol[1]}"
 
     @property
     def firmware_string(self) -> str:
+        """The firmware version as "major.minor.patch"."""
         return "{}.{}.{}".format(*self.firmware)
 
     # The names a manifest and a report already use. Kept so that a capture
     # recorded before this module existed reads the same way afterwards.
     @property
     def proto(self) -> str:
+        """Alias for `protocol_string`, for a manifest that already uses
+        this name."""
         return self.protocol_string
 
     @property
     def proto_version(self) -> tuple[int, int]:
+        """Alias for `protocol`, for a manifest that already uses this
+        name."""
         return self.protocol
 
     @property
     def fw(self) -> str:
+        """Alias for `firmware_string`, for a manifest that already uses
+        this name."""
         return self.firmware_string
 
     def microvolts_per_count(self, gain: int) -> float:
@@ -391,6 +408,8 @@ class DeviceInfo:
 
 
 def decode_device_info(data: bytes) -> DeviceInfo:
+    """The Device Info characteristic, decoded into a `DeviceInfo`, reading
+    whichever layout length the device itself declares."""
     if len(data) < INFO_V01_LEN:
         raise Truncated(f"device info is at least {INFO_V01_LEN} bytes")
     (pj, pn, fj, fn, fp, channels, bits, tick, vref, caps, rates) = _INFO_HEAD.unpack_from(data, 0)
@@ -428,6 +447,8 @@ STATUS_FLAGS = {"usb_present": 1 << 0, "buffer_high_watermark": 1 << 1}
 
 @dataclass(frozen=True)
 class Status:
+    """The Status characteristic, decoded: streaming state, mode, gain,
+    rate, contact, and buffer."""
     streaming: bool
     mode: str
     gain: int
@@ -444,6 +465,8 @@ class Status:
 
 
 def decode_status(data: bytes) -> Status:
+    """The Status characteristic, decoded into a `Status`. Raises
+    Truncated if `data` is shorter than `STATUS_LEN`."""
     if len(data) < STATUS_LEN:
         raise Truncated(f"status is {STATUS_LEN} bytes")
     (state, mode, gain_code, rate_code, charger, batt, loff, flags,
@@ -502,6 +525,7 @@ class Packet:
 
     @property
     def n_samples(self) -> int:
+        """How many samples this packet carries."""
         return len(self.counts)
 
 
@@ -546,6 +570,8 @@ class Continuity:
 
     @property
     def broken(self) -> bool:
+        """Whether the timeline broke: a loss or a re-base, rather than
+        continuing cleanly."""
         return self.kind != "continuous"
 
 
@@ -578,6 +604,8 @@ PREDICTION_FLAGS = {"gap_in_window": 1 << 0, "duty_reduced": 1 << 1,
 
 @dataclass(frozen=True)
 class Prediction:
+    """One head's output for one window, decoded from a Predictions
+    notification."""
     head_slot: int
     head_id: str
     index: int
@@ -593,6 +621,7 @@ class Prediction:
 
 
 def decode_prediction(data: bytes) -> Prediction:
+    """One Predictions notification, decoded into a `Prediction`."""
     if len(data) < PREDICTION_HEADER_LEN:
         raise Truncated("a prediction is at least its header")
     (ptype, flags, slot, n, index, device_time, window) = _PREDICTION.unpack_from(data, 0)
@@ -615,12 +644,16 @@ def decode_prediction(data: bytes) -> Prediction:
 
 @dataclass(frozen=True)
 class Battery:
+    """What the device reports about its battery: millivolts, percent,
+    and charger state."""
     millivolts: int
     percent: int | None
     charger: str
 
 
 def decode_battery(payload: bytes) -> Battery:
+    """A battery reading, decoded into a `Battery`. Raises Truncated if
+    `payload` is under four bytes."""
     if len(payload) < 4:
         raise Truncated("a battery reading is four bytes")
     mv, pct, charger = struct.unpack_from("<HBB", payload, 0)
@@ -630,6 +663,8 @@ def decode_battery(payload: bytes) -> Battery:
 
 @dataclass(frozen=True)
 class BootInfo:
+    """Which firmware slot the device started from, why, whether that
+    image has confirmed itself, and how many times it has booted."""
     slot: int
     reason: str
     confirmed: bool
@@ -637,6 +672,8 @@ class BootInfo:
 
 
 def decode_boot_info(payload: bytes) -> BootInfo:
+    """A boot information reading, decoded into a `BootInfo`. Raises
+    Truncated if `payload` is under eight bytes."""
     if len(payload) < 8:
         raise Truncated("boot information is eight bytes")
     slot, reason, state, _, count = struct.unpack_from("<BBBBI", payload, 0)
@@ -651,6 +688,8 @@ NO_HEAD = 0xFF
 
 @dataclass(frozen=True)
 class Head:
+    """One head slot: its state, output width, id, name, and the encoder
+    it names."""
     slot: int
     state: str
     out_dim: int
@@ -663,6 +702,8 @@ class Head:
 
     @property
     def usable(self) -> bool:
+        """Whether this slot holds a usable head (its state is
+        "valid")."""
         return self.state == "valid"
 
     def trained_beside(self, encoder_id: str) -> bool | None:
@@ -717,6 +758,8 @@ def with_encoders(heads: list[Head], encoders: dict[int, str]) -> list[Head]:
 
 @dataclass(frozen=True)
 class ModelInfo:
+    """What the device's model can do and is doing: its state, active
+    head, encoder, weights version, and timing."""
     state: str
     active_head: int | None
     predictions_on: bool
@@ -742,13 +785,18 @@ class ModelInfo:
 
     @property
     def ready(self) -> bool:
+        """Whether the model is loaded and ready to run (its state is
+        "ready")."""
         return self.state == "ready"
 
     def takes(self, input_class: str) -> bool:
+        """Whether the loaded model accepts `input_class` as input."""
         return bool(self.input_classes & INPUT_CLASSES.get(input_class, 0))
 
 
 def decode_model_info(payload: bytes) -> ModelInfo:
+    """GET_MODEL_INFO's answer, decoded into a `ModelInfo`. Raises
+    Truncated if `payload` is under sixteen bytes."""
     if len(payload) < 16:
         raise Truncated("model information is at least sixteen bytes")
     state, active, on = payload[0], payload[1], payload[2]
@@ -776,6 +824,8 @@ class ModelInterval:
 
 
 def decode_model_interval(payload: bytes) -> ModelInterval:
+    """GET_MODEL_INTERVAL's answer, decoded into a `ModelInterval`. Raises
+    Truncated if `payload` is under four bytes."""
     if len(payload) < 4:
         raise Truncated("a model interval is four bytes")
     return ModelInterval(*struct.unpack_from("<HH", payload, 0))
@@ -832,6 +882,8 @@ def encode_name_parts(name: str, adjective: str) -> bytes:
 
 
 def decode_name_parts(payload: bytes) -> tuple[str, str]:
+    """GET_NAME's answer, or SET_NAME's payload, decoded back into
+    (name, adjective)."""
     if not payload:
         raise Truncated("a name carries at least its lengths")
     nl = payload[0]
@@ -861,6 +913,8 @@ CONVERTER_FAMILIES = {1: "ads1299"}
 
 @dataclass(frozen=True)
 class ConverterRegisters:
+    """The converter's raw registers: which family, where they start,
+    and their values."""
     family: str
     family_code: int
     first: int
@@ -874,6 +928,9 @@ class ConverterRegisters:
 
 
 def decode_converter_registers(payload: bytes) -> ConverterRegisters:
+    """The GET_CONVERTER_REGISTERS answer, decoded into a
+    `ConverterRegisters`. Raises Truncated if `payload` is under three
+    bytes."""
     if len(payload) < 3:
         raise Truncated("registers are at least a family, a first address, and a count")
     family, first, count = payload[0], payload[1], payload[2]
@@ -1018,10 +1075,13 @@ class Embedding:
 
     @property
     def is_window_embedding(self) -> bool:
+        """Whether this is the window embedding rather than one
+        token's."""
         return self.token is None
 
 
 def decode_embedding(data: bytes) -> Embedding:
+    """One Embeddings notification, decoded into an `Embedding`."""
     if len(data) < EMBEDDING_HEADER_LEN:
         raise Truncated("an embedding is at least its header")
     (ptype, flags, dim, first, index, device_time, window, encoder, source, token) = \
@@ -1064,6 +1124,7 @@ class EmbeddingWindow:
     tokens: list[list[int]] | None = None
 
     def embedding_floats(self) -> list[float]:
+        """The window embedding, dequantized back to floats."""
         return [v / EMBED_SCALE for v in (self.embedding or [])]
 
     def token_array(self, channels: int, tokens_per_channel: int):
@@ -1099,6 +1160,9 @@ class EmbeddingAssembler:
         return self.form in ("tokens", "both")
 
     def feed(self, e: Embedding) -> EmbeddingWindow | None:
+        """Feed one decoded notification in. Returns the assembled
+        `EmbeddingWindow` once its last piece has arrived, otherwise
+        None."""
         w = self._windows.get(e.index)
         if w is None:
             w = self._windows[e.index] = {
@@ -1174,9 +1238,13 @@ class Stage:
 
     @property
     def name(self) -> str:
+        """This stage's kind in words, or "kind N" if the contract does
+        not define it."""
         return KIND_NAMES.get(self.kind, f"kind {self.kind}")
 
     def as_dict(self) -> dict:
+        """This stage as a plain dict, with its kind, name, and
+        parameters."""
         return dict(kind=self.kind, name=self.name, params=list(self.params))
 
 
@@ -1297,10 +1365,14 @@ class PipelineState:
 
     @property
     def is_default(self) -> bool:
+        """Whether the chain in force is the device's own default,
+        rather than one a host set."""
         return self.origin == "default"
 
 
 def decode_pipeline_state(payload: bytes) -> PipelineState:
+    """GET_PIPELINE's answer, decoded into a `PipelineState`. Raises
+    Truncated if `payload` is empty."""
     if not payload:
         raise Truncated("a pipeline state is at least its origin")
     if payload[0] not in ORIGIN_NAMES:
@@ -1318,6 +1390,7 @@ class PredictionInput:
 
 
 def encode_prediction_input(source: str, stages=()) -> bytes:
+    """SET_PREDICTION_INPUT's payload."""
     if source not in INPUT_SOURCES:
         raise Invalid(f"{source!r} is not a source this contract defines")
     stages = list(stages)
@@ -1327,6 +1400,8 @@ def encode_prediction_input(source: str, stages=()) -> bytes:
 
 
 def decode_prediction_input(payload: bytes) -> PredictionInput:
+    """GET_PREDICTION_INPUT's answer, decoded into a `PredictionInput`.
+    Raises Truncated if `payload` is empty."""
     if not payload:
         raise Truncated("a prediction input is at least its source")
     # Synthetic (3) is reported by a device generating its signal, never
@@ -1346,6 +1421,8 @@ class BiasDiagnostic:
 
 
 def decode_bias_diagnostic(payload: bytes) -> BiasDiagnostic:
+    """GET_BIAS_DIAGNOSTIC's answer, decoded into a `BiasDiagnostic`.
+    Raises Truncated if `payload` is under eight bytes."""
     if len(payload) < 8:
         raise Truncated("a bias diagnostic is eight bytes")
     return BiasDiagnostic(*struct.unpack_from("<4h", payload, 0))
@@ -1478,6 +1555,8 @@ SLOT_LINK_NONE = 0xFF
 
 
 def encode_update_start(target: str, slot: int, total_len: int, transfer_id: bytes) -> bytes:
+    """The Update Control write that starts a transfer: target, slot,
+    length, and transfer id."""
     if target not in UPDATE_TARGETS:
         raise Invalid(f"{target} is not something this contract transfers")
     if len(transfer_id) != 8:
@@ -1486,21 +1565,28 @@ def encode_update_start(target: str, slot: int, total_len: int, transfer_id: byt
 
 
 def encode_update_op(op: str) -> bytes:
+    """The Update Control write for an operation with no further
+    argument: query, finish, activate, or abort."""
     return bytes([UPDATE_OPS[op]])
 
 
 @dataclass(frozen=True)
 class UpdateResponse:
+    """One answer from the Update service: an operation, a status, and
+    whatever payload goes with it."""
     op: int
     status: int
     payload: bytes
 
     @property
     def ok(self) -> bool:
+        """Whether the operation succeeded (status 0)."""
         return self.status == 0
 
     @property
     def status_name(self) -> str:
+        """The status in words, or "undefined status N" if the contract
+        does not define it."""
         return UPDATE_STATUS.get(self.status, f"undefined status {self.status}")
 
     @property
@@ -1521,6 +1607,9 @@ class UpdateResponse:
         return slot, chunk_max, resume
 
     def query(self) -> tuple[str, int, int]:
+        """The transfer's state, how many bytes the device has, and
+        their checksum. Raises Truncated if the payload is under nine
+        bytes."""
         if len(self.payload) < 9:
             raise Truncated("a query answer is nine bytes")
         state, offset, crc = struct.unpack_from("<BII", self.payload, 0)
@@ -1531,6 +1620,7 @@ _UPDATE_OP_NUMBERS = frozenset(UPDATE_OPS.values())
 
 
 def decode_update_response(data: bytes) -> UpdateResponse:
+    """One Update Control response, decoded into an `UpdateResponse`."""
     if len(data) < 2:
         raise Truncated("an update answer is at least an operation and a status")
     op, status = data[0], data[1]
@@ -1554,10 +1644,13 @@ class Envelope:
 
     @property
     def total_len(self) -> int:
+        """The whole wrapped image's length: the envelope plus the
+        encrypted body."""
         return ENVELOPE_LEN + self.plain_len
 
 
 def decode_envelope(data: bytes) -> Envelope:
+    """An image's envelope header, decoded into an `Envelope`."""
     if len(data) < ENVELOPE_LEN:
         raise Truncated("an envelope is thirty two bytes")
     if data[0:4] != ENVELOPE_MAGIC or data[4] != 1:
@@ -1591,6 +1684,8 @@ EMBED_SCALE = 4096.0
 
 
 def head_blob_len(in_dim: int, out_dim: int, version: int = 2) -> int:
+    """The exact byte length of a head blob with `in_dim` inputs and
+    `out_dim` outputs, in format `version`."""
     header = HEAD_HEADER_LEN_2 if version == 2 else HEAD_HEADER_LEN
     return header + out_dim * in_dim + 8 * out_dim + HEAD_HASH_LEN
 
@@ -1665,6 +1760,8 @@ def build_head(weights, bias, scale, *, name: str = "", in_dim: int | None = Non
 
 @dataclass(frozen=True)
 class HeadBlob:
+    """A head blob, parsed into its shape, name, id, weights, bias, and
+    scale."""
     in_dim: int
     out_dim: int
     name: str

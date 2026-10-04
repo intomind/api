@@ -403,6 +403,9 @@ class Device:
                 pass
 
     async def connect(self):
+        """Connect to this device, pairing first if needed, read its
+        Device Info, and subscribe to its notifications. Drops any
+        connection this object already holds, and returns self."""
         # A SECOND CONNECT MUST NOT LEAVE THE FIRST ONE SUBSCRIBED. This used
         # to overwrite `self._client` and walk away from whatever was in it.
         # The old BleakClient stayed connected and stayed notified on DATA, so
@@ -731,6 +734,8 @@ class Device:
         return self.mono_time(device_ticks) + self._frame_offset
 
     async def set_gain(self, gain: int):
+        """Set the analog gain. Raises ValueError if `gain` is not one
+        of `gain_options()`."""
         if gain not in self.gain_options():
             raise ValueError(f"this device has no gain {gain}× "
                              f"(it has {self.gain_options()})")
@@ -738,6 +743,8 @@ class Device:
         self._gain = gain
 
     async def set_rate(self, sps: int):
+        """Set the sample rate, in samples per second, to one of
+        `rate_options()`."""
         code = {v: k for k, v in RATE_BY_CODE.items()}[sps]
         await self.command(OP["SET_RATE"], code)
 
@@ -793,6 +800,8 @@ class Device:
     # --- the model, on devices that carry one --------------------------------
 
     async def model_info(self) -> "P.ModelInfo":
+        """What the device's model can do and is doing: its state,
+        active head, encoder, weights version, and timing."""
         self._require("model", "run a model")
         return P.decode_model_info(await self._payload("get_model_info"))
 
@@ -812,10 +821,13 @@ class Device:
         return active, heads
 
     async def select_head(self, slot: int):
+        """Select the head in `slot` as the one that produces
+        predictions."""
         self._require("heads", "hold heads")
         await self.command(P.OPCODES["select_head"], slot)
 
     async def remove_head(self, slot: int):
+        """Erase the head in `slot`."""
         self._require("heads", "hold heads")
         await self.command(P.OPCODES["remove_head"], slot)
 
@@ -1155,6 +1167,8 @@ class Device:
         return result or "verified"
 
     async def abort_transfer(self):
+        """Cancel an update transfer in progress. Any error from the
+        device is ignored."""
         try:
             await self._update(P.encode_update_op("abort"))
         except Exception:                                # noqa: BLE001
@@ -1264,6 +1278,10 @@ class Device:
         return rates or sorted(RATE_BY_CODE.values())
 
     async def start(self, samples_per_packet: Optional[int] = None, new_epoch=True):
+        """Start streaming. `samples_per_packet` is a preference, clamped
+        to what fits one notification on a 247-byte link, and the default
+        is as many as fit. Resets the sample index first unless `new_epoch`
+        is false."""
         # A data packet must fit one notification: 247-byte MTU - 3 ATT
         # header - 20 packet header, over 3 bytes per channel per sample.
         # The firmware enforces its own cap (INVALID_ARG) and a request
@@ -1306,6 +1324,8 @@ class Device:
         self._expected_idx = None
 
     async def stop(self):
+        """Stop streaming. The device is marked as stopped even if the
+        command itself fails."""
         try:
             await self.command(OP["STOP"])
         finally:

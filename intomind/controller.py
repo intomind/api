@@ -185,6 +185,8 @@ def list_devices(proc_text: str | None = None) -> list[dict]:
 
 
 def find_gamepads() -> list[dict]:
+    """Every discovered input device the kernel classifies as a gamepad
+    and that has an event node to read."""
     return [d for d in list_devices() if d["is_gamepad"] and d["event_node"]]
 
 
@@ -320,6 +322,7 @@ class Controller:
         self._buf = b""
 
     def close(self) -> None:
+        """Close the device node, if it is still open."""
         if self.fd is not None:
             try:
                 os.close(self.fd)
@@ -403,6 +406,8 @@ class InputRecorder:
             map_check=(check_map(controls, caps) if controls else None)))
 
     def feed(self, events) -> int:
+        """Append events, as `Controller.poll` returns them, to the
+        recorder's columns. Returns the total event count so far."""
         for e in events:
             self.mono.append(e["mono"])
             self.host.append(e["host_time"])
@@ -433,6 +438,8 @@ class InputRecorder:
                                           for s in self.sources}))
 
     def arrays(self) -> dict:
+        """The recorded columns as numpy arrays, ready to save into a
+        capture's input file."""
         import numpy as np
         return dict(
             input_mono=np.asarray(self.mono, dtype=np.float64),

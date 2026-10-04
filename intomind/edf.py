@@ -160,6 +160,8 @@ def _transducer_of(meta: dict) -> str:
 
 
 def contiguous(index: np.ndarray) -> bool:
+    """Whether `index` climbs by exactly one sample with no break, start
+    to end."""
     return index.size < 2 or bool(np.all(np.diff(index) == 1))
 
 

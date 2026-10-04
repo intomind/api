@@ -49,11 +49,14 @@ def register(adapter) -> None:
 
 
 def unregister(adapter) -> None:
+    """Remove an adapter, if it is registered."""
     if adapter in _REGISTERED:
         _REGISTERED.remove(adapter)
 
 
 def registered() -> list:
+    """Every registered adapter, in the order they are asked (most
+    recently registered first)."""
     return list(_REGISTERED)
 
 
