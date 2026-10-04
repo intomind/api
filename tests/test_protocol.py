@@ -302,14 +302,26 @@ def test_the_lamp_the_registers_and_the_token_count_decode_from_the_vectors():
 
 def test_embeddings_decode_and_are_put_back_together():
     parts = by_kind("embedding")
-    window = P.decode_embedding(bytes.fromhex(parts[0]["bytes"]))
+    # The launch model's window embedding as a device sends it from 1.4.2:
+    # two parts, each within the 156 byte limit (1.4, section 27).
+    head, tail = (P.decode_embedding(bytes.fromhex(v["bytes"])) for v in parts[0:2])
     f = parts[0]["fields"]
-    assert window.is_window_embedding and window.embed_dim == 96 and window.values == f["values"]
-    assert window.leadoff_in_window and not window.more_parts and window.encoder_id == f["encoder_id"]
-    assert window.device_time == u64(f["device_time"]) and window.index == f["sample_index"]
-    one, two = (P.decode_embedding(bytes.fromhex(v["bytes"])) for v in parts[1:3])
+    assert all(len(bytes.fromhex(v["bytes"])) <= 156 for v in parts[0:2] + parts[3:5])
+    assert head.is_window_embedding and head.embed_dim == 76 and head.values == f["values"]
+    assert head.leadoff_in_window and head.more_parts and head.encoder_id == f["encoder_id"]
+    assert head.device_time == u64(f["device_time"]) and head.index == f["sample_index"]
+    assert (head.first, len(head.values), tail.first, len(tail.values)) == (0, 64, 64, 12)
+    assert not tail.more_parts
+    # The same vector as firmware before 1.4.2 sent it, in one notification,
+    # reads the same, and the two parts put back together equal it.
+    whole = P.decode_embedding(bytes.fromhex(parts[2]["bytes"]))
+    assert whole.first == 0 and not whole.more_parts and len(whole.values) == 76
+    joined = P.EmbeddingAssembler(channels=1, tokens_per_channel=1, form="window")
+    assert joined.feed(head) is None
+    assert joined.feed(tail).embedding == whole.values == parts[2]["fields"]["values"]
+    one, two = (P.decode_embedding(bytes.fromhex(v["bytes"])) for v in parts[3:5])
     assert one.token == two.token == 17 and one.more_parts and not two.more_parts
-    assert (one.first, len(one.values), two.first, len(two.values)) == (0, 108, 108, 20)
+    assert (one.first, len(one.values), two.first, len(two.values)) == (0, 64, 64, 64)
 
     # A whole window from notifications, arriving in any order: one channel,
     # three tokens of four values, and the window embedding.

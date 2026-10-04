@@ -97,7 +97,7 @@ await device.start()
 windows = await device.collect_embeddings(100)    # about seven minutes
 blob = train_head([w.embedding for w in windows], labels, name="focus",
                   encoder_id=windows[0].encoder_id)
-await device.upload_head(blob, slot=1, select=True)
+await device.upload_head(blob, slot=2, select=True)   # slot 1 ships with the open sex head
 await device.set_predictions(True)
 ```
 
