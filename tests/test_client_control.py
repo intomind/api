@@ -377,6 +377,20 @@ def test_a_head_trained_beside_another_encoder_is_warned_about_and_still_sent():
     assert not caught, "a head trained beside this encoder warns of nothing"
 
 
+
+def test_a_rate_the_device_does_not_have_is_refused_with_the_options():
+    dev, link = _device(ALL_1_1, _answers())
+    try:
+        asyncio.run(dev.set_rate(333))
+    except ValueError as e:
+        assert "333" in str(e) and "250" in str(e), str(e)
+    else:
+        raise AssertionError("set_rate accepted a rate the device does not have")
+    assert link.writes == [], "nothing was sent to the device"
+    asyncio.run(dev.set_rate(250))
+    assert link.writes and link.writes[-1][0] == P.OPCODES["set_rate"]
+
+
 def main() -> int:
     tests = [v for k, v in sorted(globals().items()) if k.startswith("test_")]
     failed = []
@@ -642,16 +656,3 @@ def test_collecting_enough_windows_for_a_head_waits_long_enough():
 
 if __name__ == "__main__":
     sys.exit(main())
-
-
-def test_a_rate_the_device_does_not_have_is_refused_with_the_options():
-    dev, link = _device(ALL_1_1, _answers())
-    try:
-        asyncio.run(dev.set_rate(333))
-    except ValueError as e:
-        assert "333" in str(e) and "250" in str(e), str(e)
-    else:
-        raise AssertionError("set_rate accepted a rate the device does not have")
-    assert link.writes == [], "nothing was sent to the device"
-    asyncio.run(dev.set_rate(250))
-    assert link.writes and link.writes[-1][0] == P.OPCODES["set_rate"]
