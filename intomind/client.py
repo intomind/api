@@ -744,7 +744,10 @@ class Device:
 
     async def set_rate(self, sps: int):
         """Set the sample rate, in samples per second, to one of
-        `rate_options()`."""
+        `rate_options()`. Raises ValueError for any other rate."""
+        if sps not in self.rate_options():
+            raise ValueError(f"this device has no rate {sps} samples a second "
+                             f"(it has {self.rate_options()})")
         code = {v: k for k, v in RATE_BY_CODE.items()}[sps]
         await self.command(OP["SET_RATE"], code)
 
