@@ -278,8 +278,8 @@ def _export_edf_family(label: str, path, load, bits: int) -> dict:
         counts_recovered=recovered, max_error_uv=info["max_error_uv"],
         quantum_uv=info["quantum_uv"], lsb_uv=lsb, bits=info["bits"],
         family=info["family"], continuity=info["continuity"],
-        samples_dropped=info["samples_dropped"],
         samples_filled=info["samples_filled"], gaps=info["gaps"],
+        tail_filled=info["tail_filled"],
         samples_before_restart=info["samples_before_restart"],
         n_annotations=info["n_annotations"])
 
@@ -292,8 +292,9 @@ def export_edf(label: str, path=None, *, load=None) -> dict:
     quantization cost this file. A capture whose samples must survive
     unchanged goes out as `bdf` or `npz`.
 
-    Samples are written in whole data records, so a tail shorter than one
-    record is not in the file and `samples_dropped` says how many that was.
+    Samples are written in whole data records. The last record is completed
+    after the last sample with placeholders under a `BAD_ACQ_SKIP`
+    annotation, as `edf.py` describes, and `tail_filled` says how many.
     """
     return _export_edf_family(label, path, load, 16)
 
@@ -307,8 +308,8 @@ def export_bdf(label: str, path=None, *, load=None) -> dict:
     reconstruction error is under half of this capture's own LSB, and `lossy`
     follows it rather than the other way around.
 
-    As with EDF+, whole data records only, and `samples_dropped` says what the
-    last partial record would have held.
+    As with EDF+, whole data records, the last one completed with labeled
+    placeholders, and `tail_filled` says how many.
     """
     return _export_edf_family(label, path, load, 24)
 

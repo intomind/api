@@ -25,12 +25,16 @@ Two things this writer refuses to fake:
   and each hole carries a `BAD_ACQ_SKIP` annotation over exactly its span.
   That is the label MNE gives a hole in its own files: it filters each side
   of one separately, rejects an epoch that overlaps one, and returns NaN there
-  when asked (`get_data(reject_by_annotation="NaN")`). Writing the samples
-  after a hole straight on from the ones before it would put them early by
-  the length of the hole, and so would a record onset that skips the hole,
-  because a reader such as MNE takes the records end to end. A sample index
-  that steps back is a break whose length is not known, and the file is
-  refused rather than given a timeline the recording does not have.
+  when asked (`get_data(reject_by_annotation="NaN")`). A reader that does not
+  know the label shows a hole as a flat line at the bottom of the signal's
+  range. Writing the samples after a hole straight on from the ones before
+  it would put them early by the length of the hole, and so would a record
+  onset that skips the hole, because a reader such as MNE takes the records
+  end to end. The file is whole records, and the last one is completed after
+  the last sample with the same placeholder under the same label, as MNE's
+  own writer completes it, so no recorded sample is cut. A sample index that
+  steps back is a break whose length is not known, and the file is refused
+  rather than given a timeline the recording does not have.
 
   A placeholder is the lowest number the file can store, not zero and not
   NaN. The format holds whole numbers only, so NaN cannot be written. Each
@@ -90,7 +94,8 @@ SKIP_LABEL = "BAD_ACQ_SKIP"
 #: What a lost sample is written as. None writes the lowest number the file
 #: can store, which no recorded sample can be and which costs no precision. A
 #: number of microvolts writes that instead, and the range of every signal is
-#: stretched to hold it wherever there is a hole. 0.0 writes zeros, and a
+#: stretched to hold it wherever there is a hole or a last record to
+#: complete, which is nearly every file. 0.0 writes zeros, and a
 #: recording that sits thousands of microvolts from zero is then rounded more
 #: coarsely in a 16-bit file, every recorded sample included.
 GAP_FILL_UV: float | None = None
@@ -243,7 +248,8 @@ def write_edf(path, *, signals: dict[str, np.ndarray], fs: float,
     capture's sample index, and it places every sample in time: where it
     skips ahead, the file holds a placeholder for each lost sample and a
     `BAD_ACQ_SKIP` annotation over the hole, and where it steps back, the
-    file is refused. `samples_filled` and `gaps` in the summary count them.
+    file is refused. `samples_filled` and `gaps` in the summary count them,
+    and `tail_filled` the placeholders that complete the last record.
 
     `bits` selects the width of the container: 16 for EDF+, 24 for BDF+. Both
     quantize the µV handed in onto an integer grid, so both report the step
@@ -289,16 +295,17 @@ def write_edf(path, *, signals: dict[str, np.ndarray], fs: float,
     # Integer samples per record; the remainder lives in the record duration.
     nsr = max(1, int(round(fs)))
     dur = nsr / float(fs)
-    n_rec = span // nsr
-    if n_rec == 0:
-        raise ValueError(f"capture shorter than one {dur:.3f} s record")
+    # Whole records, and the last one is completed after the last sample with
+    # placeholders under the hole's label, so that no recorded sample is cut.
+    # The tail that did not fill a record used to be left out of the file.
+    n_rec = -(-span // nsr)
     used = n_rec * nsr
-    kept = pos < used
-    holes = [(int(pos[i]) + 1, min(int(steps[i]) - 1, used - int(pos[i]) - 1))
-             for i in np.nonzero(steps > 1)[0] if pos[i] + 1 < used]
+    tail = used - span
+    holes = [(int(pos[i]) + 1, int(steps[i]) - 1)
+             for i in np.nonzero(steps > 1)[0]]
 
     # Annotations, bucketed into the record whose time span contains them:
-    # the events handed in, and one over each hole.
+    # the events handed in, one over each hole, and one over the tail.
     ann: list[list[tuple]] = [[] for _ in range(n_rec)]
     n_events = 0
     for e in events or []:
@@ -308,7 +315,7 @@ def write_edf(path, *, signals: dict[str, np.ndarray], fs: float,
         r = min(n_rec - 1, max(0, int(t / dur)))
         ann[r].append((float(t), None, str(e.get("label", ""))))
         n_events += 1
-    for first, length in holes:
+    for first, length in holes + ([(span, tail)] if tail else []):
         ann[first // nsr].append((first / fs, length / fs, SKIP_LABEL))
     # widest annotation record decides the annotation signal's size
     annot_bytes = []
@@ -335,10 +342,11 @@ def write_edf(path, *, signals: dict[str, np.ndarray], fs: float,
     #
     # Each range is fitted to the recorded samples alone. A placeholder in
     # microvolts (`GAP_FILL_UV`) has to fit too, and stretches the range.
-    fill = GAP_FILL_UV if holes else None
+    filled = bool(holes or tail)
+    fill = GAP_FILL_UV if filled else None
     ranges = {}
     for lbl in labels:
-        x = np.asarray(signals[lbl], dtype=np.float64)[kept]
+        x = np.asarray(signals[lbl], dtype=np.float64)
         if fill is not None:
             x = np.append(x, fill)
         lo, hi = _scale(x)
@@ -381,21 +389,21 @@ def write_edf(path, *, signals: dict[str, np.ndarray], fs: float,
     dig, real = {}, {}
     for lbl in labels:
         pmin, pmax = ranges[lbl]
-        real[lbl] = _digitize(np.asarray(signals[lbl])[kept], pmin, pmax,
+        real[lbl] = _digitize(np.asarray(signals[lbl]), pmin, pmax,
                               dmin=dmin, dmax=dmax)
         if fill is None:
             hole = dmin
             # The margin below the lowest sample keeps every recorded sample
             # off the lowest number. One on it could not be told from a hole,
             # so that is checked here rather than assumed.
-            if holes and np.any(real[lbl] == dmin):
+            if filled and np.any(real[lbl] == dmin):
                 raise RuntimeError(f"signal {lbl}: a recorded sample landed on "
                                    f"the number that marks a hole")
         else:
             hole = int(_digitize(np.array([fill]), pmin, pmax,
                                  dmin=dmin, dmax=dmax)[0])
         dig[lbl] = np.full(used, hole, dtype="<i4")
-        dig[lbl][pos[kept]] = real[lbl]
+        dig[lbl][pos] = real[lbl]
 
     # What this file cost, measured on the file itself: the step each signal
     # was put on, and the worst distance between a sample handed in and the
@@ -406,7 +414,7 @@ def write_edf(path, *, signals: dict[str, np.ndarray], fs: float,
         pmin, pmax = ranges[lbl]
         quantum = max(quantum, (pmax - pmin) / (dmax - dmin))
         back = _undigitize(real[lbl], pmin, pmax, dmin, dmax)
-        src = np.asarray(signals[lbl], dtype=np.float64)[kept]
+        src = np.asarray(signals[lbl], dtype=np.float64)
         max_err = max(max_err, float(np.max(np.abs(back - src))))
 
     with open(path, "wb") as f:
@@ -417,12 +425,11 @@ def write_edf(path, *, signals: dict[str, np.ndarray], fs: float,
                 f.write(_pack(dig[lbl][a:b], sample_bytes))
             f.write(annot_bytes[r].ljust(ann_nsr * sample_bytes, b"\x00"))
 
-    written = int(kept.sum())
     return dict(path=str(path), n_records=n_rec, samples_per_record=nsr,
                 record_duration_s=dur, continuity=reserved, fs=float(fs),
-                samples_written=written, samples_dropped=n - written,
+                samples_written=n,
                 samples_filled=sum(length for _, length in holes),
-                gaps=len(holes), n_annotations=n_events,
+                gaps=len(holes), tail_filled=tail, n_annotations=n_events,
                 lossy=True, bits=bits, family=w["family"],
                 quantum_uv=quantum, max_error_uv=max_err)
 

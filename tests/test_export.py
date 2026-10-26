@@ -416,8 +416,9 @@ def test_a_recording_that_starts_before_its_reset_starts_at_the_reset():
     assert s["samples_before_restart"] == 50 and s["gaps"] == 0, s
     p = pathlib.Path(s["path"])
     _, sig = read_signals(p, 3)
-    x = sig["ch1"]
-    assert np.max(np.abs(x - cap.uv(0)[50:50 + len(x)])) <= s["max_error_uv"] * 1.01 + 1e-9
+    x = sig["ch1"][:s["samples"]]                 # the rest completes the last record
+    assert len(x) == 1450
+    assert np.max(np.abs(x - cap.uv(0)[50:])) <= s["max_error_uv"] * 1.01 + 1e-9
     # Sample 300 is the file's sample 250, half a second in at 500 per second.
     assert b"+0.500000\x14cue\x14" in p.read_bytes()
 
@@ -437,10 +438,13 @@ def test_a_step_back_inside_a_recording_is_refused():
         raise AssertionError(f"{fmt} wrote a timeline that steps back")
 
 
-def test_the_last_partial_record_is_reported_not_padded():
+def test_the_last_record_is_completed_and_counted():
+    """The 200 samples past the last whole record were once left out of the
+    file. Every sample is written, and the record is completed with labeled
+    placeholders."""
     cap = fake_capture("t_tail", n=1200)
     s = X.export_bdf("t_tail", work("tail") / "a.bdf", load=lambda _l: cap)
-    assert s["samples"] == 1000 and s["samples_dropped"] == 200, s
+    assert s["samples"] == 1200 and s["tail_filled"] == 300, s
 
 
 # ---------------------------------------------------------------- csv, tsv
@@ -615,8 +619,8 @@ def test_mne_reads_both_containers():
         r = reader(s["path"], preload=True, verbose="ERROR")
         assert r.ch_names == ["ch1", "ch2"], (s["format"], r.ch_names)
         assert abs(r.info["sfreq"] - FS) < 0.01
-        assert r.n_times == s["samples"]
-        got = r.get_data(picks=[0])[0] * 1e6            # MNE returns volts
+        assert r.n_times == s["samples"] + s["tail_filled"]
+        got = r.get_data(picks=[0])[0][:s["samples"]] * 1e6   # MNE returns volts
         err = float(np.max(np.abs(got - cap.uv(0)[:s["samples"]])))
         # What the summary promised is what a foreign reader measures.
         assert err <= s["max_error_uv"] * 1.01 + 1e-9, (s["format"], err)
@@ -641,13 +645,16 @@ def test_mne_reads_a_gap_where_it_happened():
     for fmt, reader in (("edf", mne.io.read_raw_edf), ("bdf", mne.io.read_raw_bdf)):
         s = X.export("t_mne_gap", fmt, d, load=lambda _l: cap)
         r = reader(s["path"], preload=True, verbose="ERROR")
-        assert r.n_times == s["samples"] + s["samples_filled"], (fmt, r.n_times)
+        assert r.n_times == s["samples"] + s["samples_filled"] + s["tail_filled"], (fmt, r.n_times)
         skip = [(float(a["onset"]), float(a["duration"])) for a in r.annotations
                 if a["description"] == "BAD_ACQ_SKIP"]
-        assert len(skip) == 1 and abs(skip[0][0] - 750 / FS) < 1e-4 \
+        assert len(skip) == 2 and abs(skip[0][0] - 750 / FS) < 1e-4 \
             and abs(skip[0][1] - 5 / FS) < 1e-4, (fmt, skip)
+        assert abs(skip[1][0] - 1505 / FS) < 1e-4 \
+            and abs(skip[1][1] - s["tail_filled"] / FS) < 1e-4, (fmt, skip)
         hole = np.isnan(r.get_data(picks=[0], reject_by_annotation="NaN")[0])
-        assert hole.sum() == 5 and hole[750:755].all(), (fmt, int(hole.sum()))
+        assert hole.sum() == 5 + s["tail_filled"] and hole[750:755].all() \
+            and hole[1505:].all(), (fmt, int(hole.sum()))
         got = r.get_data(picks=[0])[0] * 1e6
         kept = idx < r.n_times
         err = float(np.max(np.abs(got[idx[kept]] - cap.uv(0)[kept])))

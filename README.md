@@ -118,13 +118,19 @@ Six formats, one shape, and every one of them refuses a capture that does
 not verify. `npz` and `bdf` return every sample to the count it was
 recorded at, measured per file rather than assumed. `edf` is sixteen bits
 and says so. `mat` is MATLAB v7.3, which needs `h5py` and says which line
-to type when it is missing.
+to type when it is missing. The electrode-off flags recorded with each
+sample are kept in `npz` and `mat` only.
 
 In `bdf` and `edf`, every sample is written at the time it was recorded.
 Where samples were lost, the file holds one placeholder for each of them,
 under a `BAD_ACQ_SKIP` annotation that covers the hole. MNE reads that label
 as its own: it filters each side of a hole separately, rejects an epoch that
-overlaps one, and returns the hole as NaN when asked.
+overlaps one, and returns the hole as NaN when asked. A reader that does not
+know the label shows a hole as a flat line at the bottom of the signal's
+range. These files are whole records of about a second, and the last record
+is completed after the last sample with the same placeholder under the same
+label, as MNE's own writer completes it, so no recorded sample is cut.
+`tail_filled` says how many placeholders that took.
 
 The placeholder is the lowest number the file can store. NaN is not
 possible, because these formats store whole numbers. Zero is possible, but

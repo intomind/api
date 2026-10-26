@@ -142,11 +142,14 @@ def test_a_hole_is_filled_and_every_sample_keeps_its_time():
     assert info["continuity"] == h["reserved"] == "EDF+C"
     assert info["gaps"] == 1 and info["samples_filled"] == 1000, info
 
-    # The hole is 1000 places at the lowest number the file can store, and no
+    # The hole is 1000 places at the lowest number the file can store, the
+    # tail that completes the last record is the same number, and no
     # recorded sample is that number.
     d = digital(p)
     hole = np.zeros(len(d), bool)
     hole[1500:2500] = True
+    hole[4000:] = True
+    assert info["tail_filled"] == len(d) - 4000, info
     assert np.all(d[hole] == -32768) and not np.any(d[~hole] == -32768)
 
     # Every recorded sample sits at its own index, in the file and in time.
@@ -156,8 +159,10 @@ def test_a_hole_is_filled_and_every_sample_keeps_its_time():
     assert np.max(np.abs(uv[idx[kept]] - sigs["ch1"][kept])) <= (pmax - pmin) / 65535
 
     skip = [(t, dur) for t, dur, text in annotations(p) if text == edf.SKIP_LABEL]
-    assert len(skip) == 1, skip
+    assert len(skip) == 2, skip
     assert abs(skip[0][0] - 1500 / FS) < 1e-5 and abs(skip[0][1] - 1000 / FS) < 1e-5, skip
+    assert abs(skip[1][0] - 4000 / FS) < 1e-5 \
+        and abs(skip[1][1] - info["tail_filled"] / FS) < 1e-5, skip
 
 
 def test_a_sample_index_that_steps_back_is_refused():
@@ -198,9 +203,9 @@ def test_no_recorded_sample_can_be_the_hole_value():
                     ("ramp", np.linspace(-5000.0, 5000.0, 1500))):
         idx = np.concatenate([np.arange(750), np.arange(750) + 760])
         p = tmp() / f"e4_{name}.edf"
-        edf.write_edf(p, signals={"ch1": x}, fs=FS, start=START, index=idx)
+        info = edf.write_edf(p, signals={"ch1": x}, fs=FS, start=START, index=idx)
         d = digital(p)
-        assert np.sum(d == -32768) == 10, (name, np.sum(d == -32768))
+        assert np.sum(d == -32768) == 10 + info["tail_filled"], (name, np.sum(d == -32768))
 
 
 def test_the_stated_range_holds_every_sample_however_far_from_zero():
@@ -214,12 +219,12 @@ def test_the_stated_range_holds_every_sample_however_far_from_zero():
                     ("quiet at five digits", -12346.04 + rng.normal(0, 0.3, 1500)),
                     ("quiet far above zero", 123456.7 + rng.normal(0, 0.3, 1500))):
         p = tmp() / "e5.edf"
-        edf.write_edf(p, signals={"ch1": x}, fs=FS, start=START, index=idx)
+        info = edf.write_edf(p, signals={"ch1": x}, fs=FS, start=START, index=idx)
         h = parse_header(p.read_bytes())
         pmin, pmax = h["phys_min"][0], h["phys_max"][0]
         assert pmin <= x.min() and pmax >= x.max(), (name, pmin, x.min(), x.max(), pmax)
         d = digital(p)
-        assert np.sum(d == -32768) == 10, (name, np.sum(d == -32768))
+        assert np.sum(d == -32768) == 10 + info["tail_filled"], (name, np.sum(d == -32768))
         uv = (d - (-32768)) * (pmax - pmin) / 65535 + pmin
         kept = idx < len(d)
         assert np.max(np.abs(uv[idx[kept]] - x[kept])) <= (pmax - pmin) / 65535, name
@@ -241,6 +246,7 @@ def test_samples_round_trip_within_quantization():
 
     pmin, pmax = h["phys_min"][0], h["phys_max"][0]
     uv = (d.astype(float) - (-32768)) * (pmax - pmin) / (32767 - (-32768)) + pmin
+    uv = uv[:info["samples_written"]]            # the rest completes the last record
     want = sigs["ch1"][:info["samples_written"]]
     lsb = (pmax - pmin) / 65535
     assert np.max(np.abs(uv - want)) <= lsb, np.max(np.abs(uv - want))
@@ -251,12 +257,19 @@ def test_export_is_declared_lossy():
     assert info["lossy"] is True and info["bits"] == 16
 
 
-def test_trailing_partial_record_is_dropped_not_padded():
-    """Zero-padding a short record would write samples that never existed."""
-    _, info, _ = write("h.edf", n=1200)     # 2 records of 499 = 998
-    assert info["n_records"] == 2
-    assert info["samples_written"] == 998
-    assert info["samples_dropped"] == 202
+def test_the_last_record_is_completed_and_labeled():
+    """The tail that did not fill a record used to be left out of the file.
+    It is written, and the record is completed with placeholders under the
+    hole's label, as MNE's own writer completes it."""
+    p, info, _ = write("h.edf", n=1200)     # 3 records of 499 = 1497
+    assert info["n_records"] == 3
+    assert info["samples_written"] == 1200 and info["tail_filled"] == 297, info
+    d = digital(p)
+    assert len(d) == 1497
+    assert np.all(d[1200:] == -32768) and not np.any(d[:1200] == -32768)
+    skip = [(t, dur) for t, dur, text in annotations(p) if text == edf.SKIP_LABEL]
+    assert len(skip) == 1, skip
+    assert abs(skip[0][0] - 1200 / FS) < 1e-5 and abs(skip[0][1] - 297 / FS) < 1e-5, skip
 
 
 def test_events_land_in_the_right_record():
@@ -267,13 +280,13 @@ def test_events_land_in_the_right_record():
     assert b"closed" in b and b"open" in b
 
 
-def test_too_short_capture_is_refused():
-    try:
-        write("j.edf", n=100)
-    except ValueError as e:
-        assert "shorter than one" in str(e)
-        return
-    raise AssertionError("a sub-record capture was exported")
+def test_a_capture_shorter_than_one_record_is_written_whole():
+    """It was refused while the only way to write it was to pad it with
+    samples that never existed. The placeholders are labeled, so it is one
+    record, completed."""
+    _, info, _ = write("j.edf", n=100)
+    assert info["n_records"] == 1 and info["samples_written"] == 100 \
+        and info["tail_filled"] == 399, info
 
 
 def test_mismatched_signal_lengths_are_refused():
@@ -310,12 +323,12 @@ def test_mne_can_read_what_we_wrote():
     r = mne.io.read_raw_edf(p, preload=True, verbose="ERROR")
     assert r.ch_names == ["ch1", "ch2"], r.ch_names
     assert abs(r.info["sfreq"] - FS) < 0.01, r.info["sfreq"]
-    assert r.n_times == info["samples_written"]
+    assert r.n_times == info["samples_written"] + info["tail_filled"]
 
     ann = mne.read_annotations(p)
     assert "closed" in set(map(str, ann.description))
 
-    got = r.get_data(picks=[0])[0] * 1e6            # MNE returns volts
+    got = r.get_data(picks=[0])[0][:info["samples_written"]] * 1e6   # MNE returns volts
     want = sigs["ch1"][:info["samples_written"]]
     lsb = (want.max() - want.min()) * 1.02 / 65535
     assert np.max(np.abs(got - want)) <= lsb * 1.05
