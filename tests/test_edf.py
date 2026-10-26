@@ -203,6 +203,28 @@ def test_no_recorded_sample_can_be_the_hole_value():
         assert np.sum(d == -32768) == 10, (name, np.sum(d == -32768))
 
 
+def test_the_stated_range_holds_every_sample_however_far_from_zero():
+    """The header states each bound in eight characters, which cannot hold
+    every number exactly. A bound rounded toward the samples can land inside
+    the margin, and the lowest sample is then written as the bound, or, with
+    a hole in the file, as the hole. The bounds are moved outward instead."""
+    rng = np.random.default_rng(7)
+    idx = np.concatenate([np.arange(750), np.arange(750) + 760])
+    for name, x in (("quiet far below zero", -150000.4 + rng.normal(0, 0.3, 1500)),
+                    ("quiet at five digits", -12346.04 + rng.normal(0, 0.3, 1500)),
+                    ("quiet far above zero", 123456.7 + rng.normal(0, 0.3, 1500))):
+        p = tmp() / "e5.edf"
+        edf.write_edf(p, signals={"ch1": x}, fs=FS, start=START, index=idx)
+        h = parse_header(p.read_bytes())
+        pmin, pmax = h["phys_min"][0], h["phys_max"][0]
+        assert pmin <= x.min() and pmax >= x.max(), (name, pmin, x.min(), x.max(), pmax)
+        d = digital(p)
+        assert np.sum(d == -32768) == 10, (name, np.sum(d == -32768))
+        uv = (d - (-32768)) * (pmax - pmin) / 65535 + pmin
+        kept = idx < len(d)
+        assert np.max(np.abs(uv[idx[kept]] - x[kept])) <= (pmax - pmin) / 65535, name
+
+
 # ---------------------------------------------------------------- data
 def test_samples_round_trip_within_quantization():
     """16-bit over the signal's own range: error must be under one LSB."""

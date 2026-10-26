@@ -50,6 +50,8 @@ Reference: Kemp & Olivan 2003, "European data format 'plus' (EDF+)".
 """
 from __future__ import annotations
 import datetime as _dt
+import math
+from decimal import Decimal, ROUND_CEILING, ROUND_FLOOR
 import numpy as np
 
 
@@ -129,6 +131,27 @@ def _written(x: float) -> float:
         return float(_num(x).decode().strip())
     except ValueError:
         return float(x)
+
+
+def _bound(x: float, *, below: bool) -> float:
+    """A physical bound as the eight-character header field will hold it,
+    moved away from the samples where the field cannot hold it exactly: at
+    or below `x` for the lower bound, at or above for the upper.
+
+    `_written` gives the nearest value the field holds, and past six digits
+    the value truncated toward zero, and either can land inside the margin
+    `_scale` leaves. The extreme sample is then outside the range the header
+    states, and a reader gets it back clipped to the bound.
+    """
+    if not math.isfinite(x):
+        return _written(x)
+    d = Decimal(repr(float(x)))
+    rounding = ROUND_FLOOR if below else ROUND_CEILING
+    for places in range(7, -1, -1):
+        s = f"{d.quantize(Decimal(1).scaleb(-places), rounding=rounding):f}"
+        if len(s) <= 8 and _written(float(s)) == float(s):
+            return float(s)
+    return _written(x)
 
 
 def _tal(onset: float, duration: float | None, texts: list[str]) -> bytes:
@@ -319,7 +342,7 @@ def write_edf(path, *, signals: dict[str, np.ndarray], fs: float,
         if fill is not None:
             x = np.append(x, fill)
         lo, hi = _scale(x)
-        lo_w, hi_w = _written(lo), _written(hi)
+        lo_w, hi_w = _bound(lo, below=True), _bound(hi, below=False)
         ranges[lbl] = (lo_w, hi_w) if hi_w > lo_w else (lo, hi)
 
     head = b"".join([
