@@ -197,6 +197,29 @@ class Recorder:
         return meta
 
 
+async def _arm(dev, rec, spp=25) -> bool:
+    """Arm the recorder on a count that starts again at zero, and report
+    whether this started the stream.
+
+    Every recording begins here, so that none can arm in any other order. A
+    stream that is already running has its count reset first, and the
+    recorder arms only once packets numbered before the reset have drained.
+    Arming first and resetting after saves the end of the previous stream at
+    the head of the recording, with a count that then drops back to zero,
+    and five recordings once did exactly that. A stream that is not running
+    is armed first and then started, which resets the count, so its first
+    samples are not missed.
+    """
+    was_streaming = bool(getattr(dev, "streaming", False))
+    if was_streaming:
+        await dev.reset_epoch()
+        await asyncio.sleep(0.05)          # let in-flight old-index packets drain
+    rec.arm(dev)
+    if not was_streaming:
+        await dev.start(samples_per_packet=spp)   # not streaming: start fresh (resets epoch)
+    return not was_streaming
+
+
 async def _record(dev, rec, label, seconds, extra, emit, events=None, spp=25,
                   tick=0.25, ctx=None):
     """Record from the stream that is already running.
@@ -214,16 +237,9 @@ async def _record(dev, rec, label, seconds, extra, emit, events=None, spp=25,
     # start() -- which reset the epoch MID-CAPTURE. That discontinuity poisoned
     # the sample-rate regression (a 494 SPS capture was stamped 162) and the gap
     # accounting (negative "lost").
-    was_streaming = bool(getattr(dev, "streaming", False))
-    if was_streaming:
-        await dev.reset_epoch()
-        await asyncio.sleep(0.05)          # let in-flight old-index packets drain
-    rec.arm(dev)
     extra = dict(extra)
     extra["started_utc"] = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
-    started_here = not was_streaming
-    if started_here:
-        await dev.start(samples_per_packet=spp)   # not streaming: start fresh (resets epoch)
+    started_here = await _arm(dev, rec, spp)
     t0 = time.time()
     while time.time() - t0 < seconds:
         if ctx and ctx.stop.is_set():
@@ -421,8 +437,7 @@ async def berger(dev, rec, emit, p, ctx):
     label = _lbl(ctx, "berger")
     block, reps = float(p["block"]), int(p["reps"])
     started = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
-    rec.arm(dev)
-    await dev.start(samples_per_packet=25)
+    await _arm(dev, rec)
     try:
         cue_sound(p.get("tone_start", "speech"),
                   "Starting. Sit still, breathe normally.")
@@ -487,8 +502,7 @@ async def record(dev, rec, emit, p, ctx):
     await emit(dict(type="markers",
                     names=[m.strip() for m in str(p["markers"]).split(",")
                            if m.strip()]))
-    rec.arm(dev)
-    await dev.start(samples_per_packet=25)
+    await _arm(dev, rec)
     cue_sound(p.get("tone_start", "speech"), "Recording.")
     t0 = time.time()
     limit = float(p["max_seconds"])
@@ -539,8 +553,7 @@ async def cued_protocol(dev, rec, emit, p, ctx):
     label = _lbl(ctx, "protocol")
     reps = int(p["reps"])
     started = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
-    rec.arm(dev)
-    await dev.start(samples_per_packet=25)
+    await _arm(dev, rec)
     try:
         cue_sound(p.get("tone_start", "speech"), "Starting.")
         await emit(dict(type="cue", text=f"Starting in {p['lead_in']} s"))
@@ -593,8 +606,7 @@ async def _cued_trials(dev, rec, emit, p, ctx, *, label, conds, texts,
     was unusable. A cue that starts a state must have a cue that ends it.
     """
     started = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
-    rec.arm(dev)
-    await dev.start(samples_per_packet=25)
+    await _arm(dev, rec)
     try:
         cue_sound(p.get("tone_start", "speech"), intro)
         await emit(dict(type="cue", text=f"{intro}  starting in {lead_in:.0f} s"))
@@ -734,8 +746,7 @@ async def saccade(dev, rec, emit, p, ctx):
     rnd.shuffle(conds)
 
     started = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
-    rec.arm(dev)
-    await dev.start(samples_per_packet=25)
+    await _arm(dev, rec)
     try:
         cue_sound(p.get("tone_start", "speech"),
                   "Saccade test. Keep your head still. Move only your eyes.")
