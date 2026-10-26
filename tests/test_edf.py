@@ -102,33 +102,105 @@ def test_gapless_capture_is_edf_c():
     assert parse_header(p.read_bytes())["reserved"] == "EDF+C"
 
 
-def test_capture_with_a_gap_is_edf_d_and_onsets_tell_the_truth():
-    """Concatenating across a gap to keep the file tidy invents data."""
-    idx = np.concatenate([np.arange(1500), np.arange(1500) + 2500])
-    p, info, _ = write("e.edf", index=idx)
-    assert info["continuity"] == "EDF+D"
+def digital(p: pathlib.Path, si: int = 0) -> np.ndarray:
+    """Every stored integer of one signal, records end to end."""
     b = p.read_bytes()
     h = parse_header(b)
-    assert h["reserved"] == "EDF+D"
+    rec = 2 * sum(h["nsr"])
+    pre = 2 * sum(h["nsr"][:si])
+    return np.concatenate([
+        np.frombuffer(b, "<i2", count=h["nsr"][si],
+                      offset=h["header_bytes"] + r * rec + pre)
+        for r in range(h["n_records"])]).astype(np.int64)
 
-    # Every record's onset must equal its own first sample's true time, so the
-    # records after the 1000-sample hole are pushed later by exactly the hole.
-    rec_bytes = 2 * sum(h["nsr"])
-    nsr = h["nsr"][0]
-    onsets = []
+
+def annotations(p: pathlib.Path) -> list[tuple]:
+    """(onset, duration, text) for every annotation with text."""
+    b = p.read_bytes()
+    h = parse_header(b)
+    rec = 2 * sum(h["nsr"])
+    out = []
     for r in range(h["n_records"]):
-        off = (h["header_bytes"] + r * rec_bytes
-               + 2 * (h["nsr"][0] + h["nsr"][1]))
-        tal = b[off:off + 2 * h["nsr"][2]]
-        onsets.append(float(tal.split(b"\x14")[0].decode()))
-        expect = float(idx[r * nsr] - idx[0]) / FS
-        assert abs(onsets[-1] - expect) < 1e-3, (r, onsets[-1], expect)
+        o = h["header_bytes"] + r * rec + 2 * sum(h["nsr"][:-1])
+        for tal in b[o:o + 2 * h["nsr"][-1]].split(b"\x00"):
+            parts = tal.split(b"\x14")
+            head = parts[0].split(b"\x15")
+            for text in parts[1:]:
+                if text:
+                    out.append((float(head[0]),
+                                float(head[1]) if len(head) > 1 else None,
+                                text.decode()))
+    return out
 
-    jumps = [i for i in range(1, len(onsets))
-             if onsets[i] - onsets[i - 1] > 1.5 * h["duration"]]
-    assert jumps, "the gap did not move any record onset"
-    lost = (onsets[jumps[0]] - onsets[jumps[0] - 1] - h["duration"]) * FS
-    assert abs(lost - 1000) < 2, lost      # the hole, in samples, recovered
+
+def test_a_hole_is_filled_and_every_sample_keeps_its_time():
+    """A sample written straight on from the ones before a hole sits early by
+    the length of the hole, so the hole is filled and labeled instead."""
+    idx = np.concatenate([np.arange(1500), np.arange(1500) + 2500])
+    p, info, sigs = write("e.edf", index=idx)
+    h = parse_header(p.read_bytes())
+    assert info["continuity"] == h["reserved"] == "EDF+C"
+    assert info["gaps"] == 1 and info["samples_filled"] == 1000, info
+
+    # The hole is 1000 places at the lowest number the file can store, and no
+    # recorded sample is that number.
+    d = digital(p)
+    hole = np.zeros(len(d), bool)
+    hole[1500:2500] = True
+    assert np.all(d[hole] == -32768) and not np.any(d[~hole] == -32768)
+
+    # Every recorded sample sits at its own index, in the file and in time.
+    pmin, pmax = h["phys_min"][0], h["phys_max"][0]
+    uv = (d - (-32768)) * (pmax - pmin) / 65535 + pmin
+    kept = idx < len(d)
+    assert np.max(np.abs(uv[idx[kept]] - sigs["ch1"][kept])) <= (pmax - pmin) / 65535
+
+    skip = [(t, dur) for t, dur, text in annotations(p) if text == edf.SKIP_LABEL]
+    assert len(skip) == 1, skip
+    assert abs(skip[0][0] - 1500 / FS) < 1e-5 and abs(skip[0][1] - 1000 / FS) < 1e-5, skip
+
+
+def test_a_sample_index_that_steps_back_is_refused():
+    """A break whose length is not known has no place on a timeline."""
+    idx = np.concatenate([np.arange(1500), np.arange(1400, 2900)])
+    try:
+        write("e2.edf", index=idx)
+    except ValueError as e:
+        assert "steps back" in str(e), e
+        return
+    raise AssertionError("a timeline that steps back was written")
+
+
+def test_zero_for_holes_is_one_setting_and_costs_range():
+    """A build that prefers zero changes `GAP_FILL_UV`, and the range then
+    stretches to hold it, as the module description says."""
+    idx = np.concatenate([np.arange(1500), np.arange(1500) + 2100])
+    before = edf.GAP_FILL_UV
+    edf.GAP_FILL_UV = 0.0
+    try:
+        p, info, _ = write("e3.edf", index=idx)
+    finally:
+        edf.GAP_FILL_UV = before
+    h = parse_header(p.read_bytes())
+    d = digital(p)
+    pmin, pmax = h["phys_min"][0], h["phys_max"][0]
+    step = (pmax - pmin) / 65535
+    uv = (d - (-32768)) * step + pmin
+    assert pmin <= 0.0 and np.all(np.abs(uv[1500:2100]) <= step / 2), (pmin, uv[1500])
+    assert step > 1500 / 65535, "the range did not stretch to hold zero"
+
+
+def test_no_recorded_sample_can_be_the_hole_value():
+    """The margin below each signal's lowest sample keeps the lowest number
+    for holes, at the extremes too: a flat signal and a signal at the very
+    bottom of its own range."""
+    for name, x in (("flat", np.full(1500, 42.0)),
+                    ("ramp", np.linspace(-5000.0, 5000.0, 1500))):
+        idx = np.concatenate([np.arange(750), np.arange(750) + 760])
+        p = tmp() / f"e4_{name}.edf"
+        edf.write_edf(p, signals={"ch1": x}, fs=FS, start=START, index=idx)
+        d = digital(p)
+        assert np.sum(d == -32768) == 10, (name, np.sum(d == -32768))
 
 
 # ---------------------------------------------------------------- data

@@ -382,15 +382,59 @@ def test_a_synthetic_capture_says_so_in_every_format():
     assert pathlib.Path(s["path"]).read_text().splitlines()[0].split(",")[2:] == ["ch1_uv", "ch2_uv"]
 
 
-def test_a_gap_is_discontinuous_in_both_containers():
-    """Concatenating across a hole would invent the samples that were lost."""
+def test_a_gap_keeps_every_sample_at_its_time_in_both_containers():
+    """The samples after a hole were once written straight on from the ones
+    before it, which put each of them early by the length of the hole while
+    the file still said it was discontinuous. Only where each sample lands
+    shows that, so that is what is checked."""
     idx = np.concatenate([np.arange(750), np.arange(750) + 755])
     cap = fake_capture("t_gap", n=1500, index=idx)
     d = work("gap")
-    assert X.export_edf("t_gap", d / "a.edf",
-                        load=lambda _l: cap)["continuity"] == "EDF+D"
-    assert X.export_bdf("t_gap", d / "a.bdf",
-                        load=lambda _l: cap)["continuity"] == "BDF+D"
+    for fmt, sample_bytes in (("edf", 2), ("bdf", 3)):
+        s = X.export("t_gap", fmt, d / f"a.{fmt}", load=lambda _l: cap)
+        assert s["continuity"] == fmt.upper() + "+C", s["continuity"]
+        assert s["gaps"] == 1 and s["samples_filled"] == 5, s
+        h, sig = read_signals(pathlib.Path(s["path"]), sample_bytes)
+        x = sig["ch1"]
+        assert np.all(x[750:755] == h["phys_min"][0]), "the hole is not the bottom of the range"
+        kept = idx < len(x)
+        err = float(np.max(np.abs(x[idx[kept]] - cap.uv(0)[kept])))
+        assert err <= s["max_error_uv"] * 1.01 + 1e-9, (fmt, err)
+
+
+def test_a_recording_that_starts_before_its_reset_starts_at_the_reset():
+    """Recordings that armed before resetting the count begin with samples
+    still numbered from the stream before them. The file starts at the
+    reset, says how many samples it left out, and keeps every event on the
+    sample it belongs to."""
+    idx = np.concatenate([np.arange(5000, 5050), np.arange(1450)])
+    cap = fake_capture("t_restart", n=1500, index=idx)
+    cap.host_time = np.arange(1500) / FS          # the clock runs on through the reset
+    prov.capture_path("t_restart", ".events.json").write_text(
+        json.dumps([dict(host_time=float(cap.host_time[300]), cond="cue")]))
+    s = X.export_bdf("t_restart", work("restart") / "a.bdf", load=lambda _l: cap)
+    assert s["samples_before_restart"] == 50 and s["gaps"] == 0, s
+    p = pathlib.Path(s["path"])
+    _, sig = read_signals(p, 3)
+    x = sig["ch1"]
+    assert np.max(np.abs(x - cap.uv(0)[50:50 + len(x)])) <= s["max_error_uv"] * 1.01 + 1e-9
+    # Sample 300 is the file's sample 250, half a second in at 500 per second.
+    assert b"+0.500000\x14cue\x14" in p.read_bytes()
+
+
+def test_a_step_back_inside_a_recording_is_refused():
+    """Past the first second, a count that steps back is a break inside the
+    recording, and its length is not known, so neither container is
+    written."""
+    idx = np.concatenate([np.arange(750), np.arange(700, 1450)])
+    cap = fake_capture("t_back", n=1500, index=idx)
+    for fmt in ("edf", "bdf"):
+        try:
+            X.export("t_back", fmt, work("back"), load=lambda _l: cap)
+        except ValueError as e:
+            assert "steps back" in str(e), e
+            continue
+        raise AssertionError(f"{fmt} wrote a timeline that steps back")
 
 
 def test_the_last_partial_record_is_reported_not_padded():
@@ -576,6 +620,38 @@ def test_mne_reads_both_containers():
         err = float(np.max(np.abs(got - cap.uv(0)[:s["samples"]])))
         # What the summary promised is what a foreign reader measures.
         assert err <= s["max_error_uv"] * 1.01 + 1e-9, (s["format"], err)
+
+
+def test_mne_reads_a_gap_where_it_happened():
+    """MNE takes the records end to end and never reads a record's onset,
+    so a hole has to be in the samples for everything after it to keep its
+    time. MNE knows the hole's label as its own, and returns the hole as NaN
+    when asked. Skipped if MNE is absent."""
+    try:
+        import mne
+    except ImportError:
+        print("       (skipped: mne not installed)")
+        return
+    import warnings
+    warnings.filterwarnings("ignore")
+
+    idx = np.concatenate([np.arange(750), np.arange(750) + 755])
+    cap = fake_capture("t_mne_gap", n=1500, index=idx)
+    d = work("mne_gap")
+    for fmt, reader in (("edf", mne.io.read_raw_edf), ("bdf", mne.io.read_raw_bdf)):
+        s = X.export("t_mne_gap", fmt, d, load=lambda _l: cap)
+        r = reader(s["path"], preload=True, verbose="ERROR")
+        assert r.n_times == s["samples"] + s["samples_filled"], (fmt, r.n_times)
+        skip = [(float(a["onset"]), float(a["duration"])) for a in r.annotations
+                if a["description"] == "BAD_ACQ_SKIP"]
+        assert len(skip) == 1 and abs(skip[0][0] - 750 / FS) < 1e-4 \
+            and abs(skip[0][1] - 5 / FS) < 1e-4, (fmt, skip)
+        hole = np.isnan(r.get_data(picks=[0], reject_by_annotation="NaN")[0])
+        assert hole.sum() == 5 and hole[750:755].all(), (fmt, int(hole.sum()))
+        got = r.get_data(picks=[0])[0] * 1e6
+        kept = idx < r.n_times
+        err = float(np.max(np.abs(got[idx[kept]] - cap.uv(0)[kept])))
+        assert err <= s["max_error_uv"] * 1.01 + 1e-9, (fmt, err)
 
 
 def main() -> int:

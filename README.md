@@ -120,6 +120,27 @@ recorded at, measured per file rather than assumed. `edf` is sixteen bits
 and says so. `mat` is MATLAB v7.3, which needs `h5py` and says which line
 to type when it is missing.
 
+In `bdf` and `edf`, every sample is written at the time it was recorded.
+Where samples were lost, the file holds one placeholder for each of them,
+under a `BAD_ACQ_SKIP` annotation that covers the hole. MNE reads that label
+as its own: it filters each side of a hole separately, rejects an epoch that
+overlaps one, and returns the hole as NaN when asked.
+
+The placeholder is the lowest number the file can store. NaN is not
+possible, because these formats store whole numbers. Zero is possible, but
+each signal's range would have to stretch to reach it, and most recordings
+sit thousands of microvolts from zero, so every recorded sample in a 16-bit
+file would be rounded more coarsely. The lowest number costs nothing, and
+no recorded sample can be it, because each range leaves a margin below the
+signal's lowest sample. A build that prefers zero sets
+`edf.GAP_FILL_UV = 0.0` and takes on that cost.
+
+A recording whose sample count starts again within its first second begins
+with samples from before the recording started. `bdf` and `edf` start at
+the reset, and `samples_before_restart` says how many samples were left
+out. A count that steps back later is a break whose length is not known,
+and they refuse it rather than invent one.
+
 ## Where captures live
 
 `$INTOMIND_CAPTURES`, or `~/.local/share/intomind/captures`. An

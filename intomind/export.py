@@ -30,9 +30,13 @@ Exports are written outside the captures directory. A capture is checksummed
 and frozen, an export is regenerable, and a directory holding both invites a
 ledger that counts the wrong files.
 
-Nothing per-sample is dropped in silence. An array the capture does not carry,
-or one whose length does not line up with the samples that were loaded, is
-named in the summary's `omitted` list with the reason.
+Each format says what it carries. `npz` and `mat` carry every per-sample
+array: the sample index, both clocks, the lead-off byte and the gap mark.
+`csv` and `tsv` carry both clocks, which is where a gap shows in a text file.
+`edf` and `bdf` carry every sample at the time it was recorded, with each gap
+filled and labeled as `edf.py` describes. An array a format carries that the
+capture lacks, or whose length does not line up with the samples that were
+loaded, is named in the summary's `omitted` list with the reason.
 
 `load=` stands in for `analysis.load`, which is how the tests run with no
 captures on disk.
@@ -275,6 +279,8 @@ def _export_edf_family(label: str, path, load, bits: int) -> dict:
         quantum_uv=info["quantum_uv"], lsb_uv=lsb, bits=info["bits"],
         family=info["family"], continuity=info["continuity"],
         samples_dropped=info["samples_dropped"],
+        samples_filled=info["samples_filled"], gaps=info["gaps"],
+        samples_before_restart=info["samples_before_restart"],
         n_annotations=info["n_annotations"])
 
 
