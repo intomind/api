@@ -662,6 +662,128 @@ def test_mne_reads_a_gap_where_it_happened():
         assert err <= s["max_error_uv"] * 1.01 + 1e-9, (fmt, err)
 
 
+# ---------------------------------------------------------------- lead-off
+def lead_off_capture(label: str, active):
+    """A capture whose ch1 electrode is off for samples 100 to 199 and ch2's
+    for 300 to 349, with detection running where `active` says, or nothing
+    said about it when `active` is None."""
+    cap = fake_capture(label, n=1500)
+    byte = np.zeros(1500, np.uint8)
+    byte[100:200] |= 0x01
+    byte[300:350] |= 0x02
+    cap.leadoff = byte
+    cap.leadoff_active = None if active is None else np.asarray(active, bool)
+    return cap
+
+
+def annotations_of(path: pathlib.Path, sample_bytes: int) -> list[tuple]:
+    """(onset in samples, duration in samples, text) of every annotation."""
+    b = path.read_bytes()
+    h = parse_header(b)
+    rec = sum(n * sample_bytes for n in h["nsr"])
+    pre = sum(h["nsr"][:-1]) * sample_bytes
+    out = []
+    for r in range(h["n_records"]):
+        o = h["header_bytes"] + r * rec + pre
+        for tal in b[o:o + h["nsr"][-1] * sample_bytes].split(b"\x00"):
+            parts = tal.split(b"\x14")
+            head = parts[0].split(b"\x15")
+            for text in parts[1:]:
+                if text:
+                    out.append((round(float(head[0]) * FS),
+                                round(float(head[1]) * FS) if len(head) > 1 else None,
+                                text.decode()))
+    return out
+
+
+def test_lead_off_is_written_in_every_format_where_detection_was_running():
+    """Each format carries lead-off where the device was checking: a column
+    per channel in text, a BAD_LEADOFF label over each stretch in EDF+ and
+    BDF+, and the flag itself in the archives."""
+    cap = lead_off_capture("t_loff", np.ones(1500, bool))
+    d = work("loff")
+    for fmt in X.FORMATS:
+        if fmt == "mat" and not have_h5py():
+            continue
+        s = X.export("t_loff", fmt, d, load=lambda _l: cap)
+        assert s["contact"] == "checked", (fmt, s["contact"])
+    for fmt in ("csv", "tsv"):
+        rows = list(csv.reader((d / f"t_loff.{fmt}").open(),
+                               delimiter="," if fmt == "csv" else "\t"))
+        c1, c2 = rows[0].index("ch1_leadoff"), rows[0].index("ch2_leadoff")
+        assert [r[c1] for r in rows[1:]] == ["1" if 100 <= i < 200 else "0" for i in range(1500)]
+        assert [r[c2] for r in rows[1:]] == ["1" if 300 <= i < 350 else "0" for i in range(1500)]
+    for fmt, sample_bytes in (("edf", 2), ("bdf", 3)):
+        got = [a for a in annotations_of(d / f"t_loff.{fmt}", sample_bytes)
+               if "LEADOFF" in a[2]]
+        assert got == [(100, 100, "BAD_LEADOFF ch1"), (300, 50, "BAD_LEADOFF ch2")], (fmt, got)
+    with np.load(d / "t_loff.npz") as z:
+        assert z["leadoff_active"].all() and z["leadoff"][150] == 0x01
+
+
+def test_a_recording_checked_for_part_of_its_length_says_where_it_was_not():
+    """Where nothing was checking, a text row is empty rather than 0, and
+    EDF+ and BDF+ label that stretch, so it cannot read as attached."""
+    active = np.zeros(1500, bool)
+    active[:1000] = True
+    cap = lead_off_capture("t_loff_part", active)
+    d = work("loff_part")
+    s = X.export("t_loff_part", "csv", d, load=lambda _l: cap)
+    assert s["contact"] == "partly checked", s["contact"]
+    rows = list(csv.reader((d / "t_loff_part.csv").open()))
+    col = [r[rows[0].index("ch1_leadoff")] for r in rows[1:]]
+    assert col[:1000] == ["1" if 100 <= i < 200 else "0" for i in range(1000)]
+    assert col[1000:] == [""] * 500, "a row nothing was checking reads as attached"
+    s = X.export("t_loff_part", "edf", d, load=lambda _l: cap)
+    assert s["contact"] == "partly checked" and s["electrode_off_stretches"] == 2, s
+    got = [a for a in annotations_of(d / "t_loff_part.edf", 2) if "LEADOFF" in a[2]]
+    assert (1000, 500, "LEADOFF_NOT_CHECKED") in got, got
+
+
+def test_lead_off_is_left_out_where_nothing_was_checking_or_nothing_says():
+    """A column of zeros would read as every electrode attached. A capture
+    whose detection was off says "not checked", one that does not say
+    whether it was says "not known", and neither gets a column or a label."""
+    d = work("loff_none")
+    for label, active, want in (("t_loff_off", np.zeros(1500, bool), "not checked"),
+                                ("t_loff_unknown", None, "not known")):
+        cap = lead_off_capture(label, active)
+        for fmt in ("npz", "csv", "tsv", "edf", "bdf"):
+            s = X.export(label, fmt, d, load=lambda _l, c=cap: c)
+            assert s["contact"] == want, (label, fmt, s["contact"])
+        assert "leadoff" not in (d / f"{label}.csv").read_text().splitlines()[0]
+        for fmt, sample_bytes in (("edf", 2), ("bdf", 3)):
+            assert not [a for a in annotations_of(d / f"{label}.{fmt}", sample_bytes)
+                        if "LEADOFF" in a[2]], (label, fmt)
+
+
+def test_mne_rejects_an_epoch_where_an_electrode_was_off():
+    """MNE reads a label that begins BAD as bad, so an epoch over a stretch
+    an electrode was off is rejected and one elsewhere is kept. Skipped if
+    MNE is absent."""
+    try:
+        import mne
+    except ImportError:
+        print("       (skipped: mne not installed)")
+        return
+    import warnings
+    warnings.filterwarnings("ignore")
+
+    cap = lead_off_capture("t_mne_loff", np.ones(1500, bool))
+    d = work("mne_loff")
+    for fmt, reader in (("edf", mne.io.read_raw_edf), ("bdf", mne.io.read_raw_bdf)):
+        s = X.export("t_mne_loff", fmt, d, load=lambda _l: cap)
+        r = reader(s["path"], preload=True, verbose="ERROR")
+        bad = [(round(float(a["onset"]) * FS), round(float(a["duration"]) * FS),
+                a["description"]) for a in r.annotations
+               if a["description"].startswith("BAD_LEADOFF")]
+        assert bad == [(100, 100, "BAD_LEADOFF ch1"), (300, 50, "BAD_LEADOFF ch2")], (fmt, bad)
+        events = np.array([[150, 0, 1], [700, 0, 1]])
+        epochs = mne.Epochs(r, events, tmin=0.0, tmax=0.1, baseline=None,
+                            reject_by_annotation=True, preload=True, verbose="ERROR")
+        assert len(epochs) == 1, (fmt, len(epochs))
+
+
 def main() -> int:
     tests = [v for k, v in sorted(globals().items()) if k.startswith("test_")]
     failed = []

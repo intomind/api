@@ -84,6 +84,11 @@ class Sample:
     #: 1.3: the device generated this sample rather than measuring it. It
     #: came in a synthetic packet (type 0x04), and nothing else sets it.
     synthetic: bool = False
+    #: Whether the device was running lead-off detection when it sent this
+    #: sample, from the packet's own flag. `leadoff` is zero both when every
+    #: electrode was attached and when nothing was checking, and this is the
+    #: only thing that tells the two apart. None where the source did not say.
+    leadoff_active: Optional[bool] = None
 
 
 
@@ -1394,7 +1399,8 @@ class Device:
                     pkt.index + i, dt, self.host_time(dt), tuple(row),
                     tuple(round(c * lsb_uv, 3) for c in row),
                     pkt.leadoff, gap_before=(gap and i == 0),
-                    synthetic=pkt.synthetic))
+                    synthetic=pkt.synthetic,
+                    leadoff_active=pkt.leadoff_active))
         self.samples_total += ns
 
     def _on_prediction(self, _h, d):

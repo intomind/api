@@ -99,7 +99,7 @@ class Recorder:
         """Clear every buffered sample and packet, and leave the recorder
         disarmed."""
         self.idx, self.dt, self.ht = [], [], []
-        self.ch, self.lo, self.gp = [], [], []
+        self.ch, self.lo, self.gp, self.la = [], [], [], []
         self.packets = []
         self.armed = False
         self.gaps_at_arm = 0
@@ -125,6 +125,7 @@ class Recorder:
         self.idx.append(s.index); self.dt.append(s.device_time)
         self.ht.append(s.host_time); self.ch.append(s.channels)
         self.lo.append(s.leadoff); self.gp.append(s.gap_before)
+        self.la.append(getattr(s, "leadoff_active", None))
 
     def on_packet(self, _dev, p):
         """Buffer one packet, while armed. Set as a device's `on_packet`
@@ -144,12 +145,18 @@ class Recorder:
         index = np.array(self.idx, dtype=np.int64)
         ticks = np.array(self.dt, dtype=np.int64)
         counts = np.array(self.ch, dtype=np.int64).T
+        marks = dict(leadoff=np.array(self.lo, dtype=np.uint8),
+                     gap_before=np.array(self.gp, dtype=bool))
+        # Whether detection was running at each sample, from the packet's own
+        # flag. A zero lead-off byte means an attached electrode only where
+        # this is true, so it is kept beside the byte, and only when every
+        # sample said.
+        if all(a is not None for a in self.la):
+            marks["leadoff_active"] = np.array(self.la, dtype=bool)
         np.savez_compressed(
             prov.capture_path(label, ".npz"), counts=counts, index=index,
             device_ticks=ticks,
-            host_time=np.array(self.ht, dtype=np.float64),
-            leadoff=np.array(self.lo, dtype=np.uint8),
-            gap_before=np.array(self.gp, dtype=bool))
+            host_time=np.array(self.ht, dtype=np.float64), **marks)
 
         # Controller input goes to its own array file, not into events.json.
         # An analog stick emits a couple of hundred events a second, so an

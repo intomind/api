@@ -665,13 +665,13 @@ def test_a_capture_with_no_controller_returns_nothing():
 
 
 # ------------------------------------------- repairs made on read, not on disk
-def _write_raw(label, counts, ticks, host_time, meta_extra=None):
+def _write_raw(label, counts, ticks, host_time, meta_extra=None, **marks):
     """A capture written straight from arrays, defects and all.
 
     `write_capture` derives ticks and host_time from the sample index, which
     is exactly what a healthy recorder produces -- so these tests, which are
     about recorders that were not healthy, have to lay the arrays down
-    themselves.
+    themselves. `marks` are further per-sample arrays to store beside them.
     """
     n = counts.shape[1]
     np.savez_compressed(A.CAPTURES / f"{label}.npz", counts=counts,
@@ -679,7 +679,7 @@ def _write_raw(label, counts, ticks, host_time, meta_extra=None):
                         device_ticks=np.asarray(ticks, np.int64),
                         host_time=np.asarray(host_time, float),
                         leadoff=np.zeros(n, np.uint8),
-                        gap_before=np.zeros(n, bool))
+                        gap_before=np.zeros(n, bool), **marks)
     meta = dict(label=label, n=n, fs_effective=FS, vref_uv=VREF_UV, gain=GAIN,
                 adc_bits=24,
                 tick_hz=1_000_000, settle=0.0, block=10.0, gaps_announced=0)
@@ -709,6 +709,25 @@ def test_duplicate_packet_delivery_is_removed():
     assert np.array_equal(cap.device_ticks, ticks)
     assert any("delivered 2 times over" in r for r in cap.repairs), cap.repairs
     assert A.load(lbl, repair=False).counts.shape[1] == 2 * n
+
+
+def test_whether_detection_was_running_is_loaded_with_its_samples():
+    """The flag belongs to the sample it was recorded beside, so the repair
+    that drops duplicated samples drops their flags with them, and a capture
+    recorded before the flag was stored loads it as None, not as False."""
+    n, spp = 40, 5
+    base = np.vstack([np.arange(n), np.arange(n) * 2]).astype(np.int64)
+    ticks = np.arange(n, dtype=np.int64) * 4000
+    active = np.arange(n) % 3 == 0
+    keep = [slice(i, i + spp) for i in range(0, n, spp)]
+    dup_c = np.hstack([base[:, s] for s in keep for _ in (0, 1)])
+    dup_t = np.hstack([ticks[s] for s in keep for _ in (0, 1)])
+    dup_a = np.hstack([active[s] for s in keep for _ in (0, 1)])
+    cap = A.load(_write_raw("t_dupe_active", dup_c, dup_t, dup_t / 1e6,
+                            leadoff_active=dup_a))
+    assert cap.counts.shape[1] == n
+    assert cap.leadoff_active is not None and np.array_equal(cap.leadoff_active, active)
+    assert A.load(_write_raw("t_no_active", base, ticks, ticks / 1e6)).leadoff_active is None
 
 
 def test_repeated_ticks_with_different_counts_are_not_halved():

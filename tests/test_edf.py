@@ -231,6 +231,25 @@ def test_the_stated_range_holds_every_sample_however_far_from_zero():
         assert np.max(np.abs(uv[idx[kept]] - x[kept])) <= (pmax - pmin) / 65535, name
 
 
+def test_a_stretch_is_one_annotation_per_run_and_a_hole_ends_it():
+    """Each run of flagged samples is one annotation over exactly its span
+    on the file's timeline, and a hole splits a run, because nothing is
+    known about a sample that never arrived."""
+    idx = np.concatenate([np.arange(1000), np.arange(1000) + 1010])
+    flags = np.zeros(2000, bool)
+    flags[200:300] = True           # one run
+    flags[900:1100] = True          # across the hole: two runs
+    flags[1990:] = True             # up to the last sample
+    t = np.arange(2000) / FS
+    p = tmp() / "s.edf"
+    info = edf.write_edf(p, signals={"ch1": 1500.0 + 20 * np.sin(2 * np.pi * 10 * t)},
+                         fs=FS, start=START, index=idx, stretches={"MARK": flags})
+    got = [(round(a * FS), round(b * FS)) for a, b, text in annotations(p)
+           if text == "MARK"]
+    assert got == [(200, 100), (900, 100), (1010, 100), (2000, 10)], got
+    assert info["stretch_counts"] == {"MARK": 4}, info["stretch_counts"]
+
+
 # ---------------------------------------------------------------- data
 def test_samples_round_trip_within_quantization():
     """16-bit over the signal's own range: error must be under one LSB."""

@@ -31,12 +31,23 @@ and frozen, an export is regenerable, and a directory holding both invites a
 ledger that counts the wrong files.
 
 Each format says what it carries. `npz` and `mat` carry every per-sample
-array: the sample index, both clocks, the lead-off byte and the gap mark.
-`csv` and `tsv` carry both clocks, which is where a gap shows in a text file.
-`edf` and `bdf` carry every sample at the time it was recorded, with each gap
-filled and labeled as `edf.py` describes. An array a format carries that the
-capture lacks, or whose length does not line up with the samples that were
-loaded, is named in the summary's `omitted` list with the reason.
+array: the sample index, both clocks, the lead-off byte, whether detection
+was running, and the gap mark. `csv` and `tsv` carry both clocks, which is
+where a gap shows in a text file. `edf` and `bdf` carry every sample at the
+time it was recorded, with each gap filled and labeled as `edf.py`
+describes. An array a format carries that the capture lacks, or whose length
+does not line up with the samples that were loaded, is named in the
+summary's `omitted` list with the reason.
+
+Lead-off goes into every format, and only where the capture says detection
+was running, because a lead-off byte of zero is an attached electrode there
+and nothing at all anywhere else. `csv` and `tsv` gain a `chN_leadoff`
+column per channel: 1 where the electrode was off, 0 where it was attached,
+empty where nothing was checking. `edf` and `bdf` label each stretch an
+electrode was off `BAD_LEADOFF` and the channel, which MNE treats as bad.
+Every summary says, in `contact`, whether contact was "checked", "partly
+checked", "not checked", or is "not known", which is what a capture
+recorded before detection was stored says.
 
 `load=` stands in for `analysis.load`, which is how the tests run with no
 captures on disk.
@@ -172,16 +183,18 @@ def _archive(label: str) -> dict:
     """The per-sample marks from the capture's own archive.
 
     `analysis.Capture` holds the counts, the sample index, the two clocks and
-    the manifest. The lead-off byte and the gap mark are recorded per sample
-    and are in the capture's `.npz`, so they are read from there when the
-    loaded object does not expose them. Read only, and only these two.
+    the manifest. The lead-off byte, whether detection was running and the
+    gap mark are recorded per sample and are in the capture's `.npz`, so they
+    are read from there when the loaded object does not expose them. Read
+    only, and only these three.
     """
     try:
         p = prov.capture_path(label, ".npz")
         if not p.exists():
             return {}
         with np.load(p) as z:
-            return {k: z[k] for k in ("leadoff", "gap_before") if k in z.files}
+            return {k: z[k] for k in ("leadoff", "gap_before", "leadoff_active")
+                    if k in z.files}
     except (OSError, ValueError, KeyError):
         return {}
 
@@ -190,18 +203,46 @@ def _per_sample(cap, label: str, n: int):
     """Every per-sample array except the microvolts, with what was left out."""
     found, omitted = {}, []
     archive = None
-    for name in ("index", "device_ticks", "host_time", "leadoff", "gap_before"):
+    for name in ("index", "device_ticks", "host_time", "leadoff", "gap_before",
+                 "leadoff_active"):
         a = getattr(cap, name, None)
-        if a is None and name in ("leadoff", "gap_before"):
+        if a is None and name in ("leadoff", "gap_before", "leadoff_active"):
             if archive is None:
                 archive = _archive(label)
             a = archive.get(name)
+        if a is None and name == "leadoff_active":
+            # A capture recorded before this was stored. `contact` in the
+            # summary says so, rather than a line here on every old capture.
+            continue
         arr, why = _aligned(name, a, n)
         if arr is None:
             omitted.append(why)
         else:
             found[name] = arr
     return found, omitted
+
+
+def contact_state(leadoff, leadoff_active) -> str:
+    """Whether electrode contact was checked, in the words every export
+    summary reports it: "checked", "partly checked", "not checked", or "not
+    known" for a capture that does not say whether detection was running.
+
+    A zero in `leadoff` is an attached electrode only where detection was
+    running, so the status alone says nothing. Nothing is inferred from a
+    manifest that asked for detection either: that records what was asked,
+    not when the device began to check.
+    """
+    if leadoff is None or leadoff_active is None:
+        return "not known"
+    active = np.asarray(leadoff_active, dtype=bool)
+    if not active.any():
+        return "not checked"
+    return "checked" if active.all() else "partly checked"
+
+
+#: Channels the lead-off status covers. The protocol gives it one byte per
+#: packet, one bit per channel, so a channel past the eighth has none.
+LEADOFF_CHANNELS = 8
 
 
 def _decimals(lsb_uv: float) -> int:
@@ -250,7 +291,8 @@ def export_npz(label: str, path=None, *, load=None) -> dict:
     return _summary(label, out, "npz", cap, samples=n, problems=problems,
                     lossy=not recovered, counts_recovered=recovered,
                     max_error_uv=err, lsb_uv=lsb, omitted=omitted,
-                    arrays=sorted(arrays))
+                    arrays=sorted(arrays),
+                    contact=contact_state(found.get("leadoff"), found.get("leadoff_active")))
 
 
 # ---------------------------------------------------------------- edf, bdf
@@ -280,7 +322,8 @@ def _export_edf_family(label: str, path, load, bits: int) -> dict:
         family=info["family"], continuity=info["continuity"],
         samples_dropped=info["samples_dropped"],
         samples_filled=info["samples_filled"], gaps=info["gaps"],
-        tail_filled=info["tail_filled"],
+        tail_filled=info["tail_filled"], contact=info["contact"],
+        electrode_off_stretches=info["electrode_off_stretches"],
         samples_before_restart=info["samples_before_restart"],
         n_annotations=info["n_annotations"])
 
@@ -330,27 +373,39 @@ def _export_delimited(label: str, path, load, fmt: str, delimiter: str) -> dict:
     found, omitted = _per_sample(cap, label, n)
     host = found.get("host_time")
     ticks = found.get("device_ticks")
+    byte, active = found.get("leadoff"), found.get("leadoff_active")
+    checked = contact_state(byte, active)
+    # One lead-off column per channel the status covers, and only when
+    # detection was running somewhere in the capture: a column of zeros from
+    # a capture nothing was checking would read as every electrode attached.
+    off = (range(min(nch, LEADOFF_CHANNELS))
+           if checked in ("checked", "partly checked") else range(0))
 
     with open(out, "w", newline="", encoding="utf-8") as f:
         w = _csv.writer(f, delimiter=delimiter, lineterminator="\n")
         w.writerow(["host_time_s", "device_time"]
-                   + [_column(cap, c) for c in range(nch)])
+                   + [_column(cap, c) for c in range(nch)]
+                   + [f"ch{c + 1}_leadoff" for c in off])
         for i in range(n):
             w.writerow([f"{float(host[i]):.6f}" if host is not None else "",
                         int(ticks[i]) if ticks is not None else "",
-                        *(f"{float(uv[c][i]):.{dec}f}" for c in range(nch))])
+                        *(f"{float(uv[c][i]):.{dec}f}" for c in range(nch)),
+                        *((int(byte[i]) >> c) & 1 if active[i] else ""
+                          for c in off)])
 
     resolution = 10.0 ** -dec
     recovered = bool(resolution / 2.0 < 0.5 * lsb)
-    # Only the two clocks can go missing from a row. The marks are not columns
-    # here, so they are not reported as omitted from a file that never has them.
+    # Only the two clocks can go missing from a row. The other marks are not
+    # columns here, and lead-off is one only where `contact` says detection
+    # was running, so none of them is reported as omitted from a file that
+    # never has it.
     omitted = [o for o in omitted
                if o.startswith("host_time") or o.startswith("device_ticks")]
     return _summary(label, out, fmt, cap, samples=n, problems=problems,
                     delimiter=delimiter, decimals=dec,
                     resolution_uv=resolution, lsb_uv=lsb,
                     counts_recovered=recovered, lossy=not recovered,
-                    omitted=omitted)
+                    omitted=omitted, contact=checked)
 
 
 def export_csv(label: str, path=None, *, load=None) -> dict:
@@ -360,6 +415,10 @@ def export_csv(label: str, path=None, *, load=None) -> dict:
     Both clocks are columns because both are what makes a gap visible in a
     text file. The rows are the samples that were loaded, in order, and
     nothing is inserted to bridge a hole in them.
+
+    Where detection was running, a `chN_leadoff` column per channel follows:
+    1 where the electrode was off, 0 where it was attached, and empty in a
+    row where nothing was checking.
     """
     return _export_delimited(label, path, load, "csv", ",")
 
@@ -457,7 +516,8 @@ def export_mat(label: str, path=None, *, load=None) -> dict:
     return _summary(label, out, "mat", cap, samples=n, problems=problems,
                     lossy=False, counts_recovered=True, max_error_uv=0.0,
                     lsb_uv=lsb, stored_dtype="float64", omitted=omitted,
-                    variables=sorted([matrix, "manifest_json", *found]))
+                    variables=sorted([matrix, "manifest_json", *found]),
+                    contact=contact_state(found.get("leadoff"), found.get("leadoff_active")))
 
 
 # ---------------------------------------------------------------- dispatch

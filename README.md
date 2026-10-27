@@ -118,8 +118,17 @@ Six formats, one shape, and every one of them refuses a capture that does
 not verify. `npz` and `bdf` return every sample to the count it was
 recorded at, measured per file rather than assumed. `edf` is sixteen bits
 and says so. `mat` is MATLAB v7.3, which needs `h5py` and says which line
-to type when it is missing. The electrode-off flags recorded with each
-sample are kept in `npz` and `mat` only.
+to type when it is missing.
+
+Lead-off is in every format, and only where the recording says detection
+was running: a lead-off status of zero is an attached electrode there and
+nothing at all anywhere else. `csv` and `tsv` add a `chN_leadoff` column per
+channel, 1 where the electrode was off, 0 where it was attached, and empty
+where nothing was checking. `bdf` and `edf` label each stretch an electrode
+was off `BAD_LEADOFF` and the channel, which MNE treats as bad. `npz` and
+`mat` hold the flag itself as `leadoff_active`. Every summary says in
+`contact` whether contact was checked, and a recording made before the flag
+was kept says "not known".
 
 In `bdf` and `edf`, every sample is written at the time it was recorded.
 Where samples were lost, the file holds one placeholder for each of them,

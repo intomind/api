@@ -102,6 +102,42 @@ def test_every_recording_arms_through_one_function():
         assert "await _arm(dev, rec" in inspect.getsource(fn), name
 
 
+def test_a_recording_keeps_whether_lead_off_detection_was_running():
+    """A zero lead-off byte cannot say whether an electrode was attached or
+    nothing was checking. Each sample says, and the recorder keeps that
+    beside the byte, and leaves it out of a recording in which any sample
+    did not say, rather than guess."""
+    import tempfile
+    import numpy as np
+    from intomind import provenance as prov
+    from intomind.client import Sample
+    before, manifest = prov.captures_dir(), prov.build_manifest
+    prov.use_captures_dir(tempfile.mkdtemp(prefix="intomind_rec_"))
+    prov.build_manifest = lambda **_kw: {}
+    try:
+        dev = types.SimpleNamespace(info=types.SimpleNamespace(fw="test"),
+                                    gaps_announced=0)
+        for label, said in (("t_said", [True, True, False]),
+                            ("t_unsaid", [True, None, True])):
+            rec = X.Recorder()
+            rec.arm(dev)
+            for i, active in enumerate(said):
+                rec.on_sample(dev, Sample(i, i, i / 500.0, (1, 2), (0.1, 0.2),
+                                          0x01 if i == 1 else 0,
+                                          leadoff_active=active))
+            rec.save(dev, label, {})
+            with np.load(prov.capture_path(label, ".npz")) as z:
+                assert list(z["leadoff"]) == [0, 1, 0], label
+                if label == "t_said":
+                    assert z["leadoff_active"].dtype == bool
+                    assert list(z["leadoff_active"]) == said
+                else:
+                    assert "leadoff_active" not in z.files, "a guess was saved"
+    finally:
+        prov.build_manifest = manifest
+        prov.use_captures_dir(before)
+
+
 def main() -> int:
     tests = [v for k, v in sorted(globals().items()) if k.startswith("test_")]
     failed = []

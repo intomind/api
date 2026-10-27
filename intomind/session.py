@@ -64,9 +64,11 @@ class Session:
         device wrote ten columns under an eight column header and every
         reader of that file silently mismatched its columns.
 
-        The last column says whether the device generated the sample
-        rather than measuring it (1.3), so a file of synthetic signal
-        cannot pass for a recording of a person.
+        `synthetic` says whether the device generated the sample rather
+        than measuring it (1.3), so a file of synthetic signal cannot pass
+        for a recording of a person. The last column says whether lead-off
+        detection was running, because a `leadoff` of zero means every
+        electrode was attached only when it was.
         """
         channels = max((d.info.channels for d in self.devices if d.info), default=0)
         if not channels:
@@ -78,14 +80,15 @@ class Session:
         self._recorder.writerow(
             ["host_time", "device", "sample_index", "device_time_ticks",
              *[f"ch{c + 1}_uV" for c in range(channels)],
-             "leadoff", "gap_before", "synthetic"])
+             "leadoff", "gap_before", "synthetic", "leadoff_active"])
 
     def _sink(self, dev: Device, s: Sample):
         if self._recorder:
+            active = getattr(s, "leadoff_active", None)
             self._recorder.writerow(
                 [f"{s.host_time:.6f}", dev.info.device_id[-4:], s.index,
                  s.device_time, *s.uv, s.leadoff, int(s.gap_before),
-                 int(s.synthetic)])
+                 int(s.synthetic), "" if active is None else int(active)])
 
     async def start_all(self, **kw):
         """Start streaming on every connected device, passing `kw` to each

@@ -552,6 +552,30 @@ def test_a_generated_sample_says_so_and_a_measured_one_does_not():
     assert kinds == {True, False}, "vectors of both kinds"
 
 
+def test_every_sample_says_whether_lead_off_detection_was_running():
+    """A lead-off status of zero is an attached electrode only where the
+    device was checking, and the packet's flags say whether it was. Every
+    sample carries that, both ways, so a recording can keep it."""
+    import types
+    from test_protocol import by_kind
+    from intomind import client, protocol as P
+    seen = set()
+    for v in by_kind("eeg_data"):
+        for flip in (0, P.DATA_FLAGS["leadoff_active"]):
+            raw = bytearray(bytes.fromhex(v["bytes"]))
+            raw[1] ^= flip                      # the flags byte
+            raw = bytes(raw)
+            pkt = P.decode_packet(raw, 4)
+            dev = client.Device(types.SimpleNamespace(address="EE:AE:00:00:00:01", name="IntoMind One", details={}))
+            dev.info = types.SimpleNamespace(channels=4, tick_hz=1_000_000, microvolts_per_count=lambda gain: 1.0)
+            got = []
+            dev.on_sample = lambda _d, s: got.append(s)
+            dev._on_data(None, raw)
+            assert got and all(s.leadoff_active is pkt.leadoff_active for s in got), v["name"]
+            seen.add(pkt.leadoff_active)
+    assert seen == {True, False}, "samples of both kinds"
+
+
 def test_a_refusal_on_usb_power_says_to_unplug():
     """1.4: a stream refused while USB power is present is a typed refusal
     whose words say what to do, and still read `-> status 7`."""

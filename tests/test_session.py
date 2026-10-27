@@ -68,8 +68,29 @@ def test_the_recorders_file_says_which_samples_were_generated():
     s._sink(dev, Sample(1, 2, 0.002, (1, 2), (0.1, 0.2), 0, synthetic=True))
     s._file.close()
     rows = list(csv.reader(path.open()))
-    assert rows[0][-1] == "synthetic" and len(rows[0]) == len(rows[1])
-    assert [r[-1] for r in rows[1:]] == ["0", "1"]
+    col = rows[0].index("synthetic")
+    assert len(rows[0]) == len(rows[1])
+    assert [r[col] for r in rows[1:]] == ["0", "1"]
+
+
+def test_the_recorders_file_says_whether_lead_off_detection_was_running():
+    """A `leadoff` of zero is an attached electrode only where the device was
+    checking, so the last column says whether it was, and is empty for a
+    sample that did not say."""
+    import csv, tempfile
+    from intomind.client import Sample
+    s = S.Session()
+    dev = SimpleNamespace(info=SimpleNamespace(channels=2, device_id="00000000c0de0001"))
+    s.devices = [dev]
+    path = pathlib.Path(tempfile.mkdtemp(prefix="intomind_session_")) / "r.csv"
+    s.record_to(str(path))
+    for i, active in enumerate((True, False, None)):
+        s._sink(dev, Sample(i, i, i / 500, (1, 2), (0.1, 0.2), 0,
+                            leadoff_active=active))
+    s._file.close()
+    rows = list(csv.reader(path.open()))
+    assert rows[0][-1] == "leadoff_active" and len(rows[0]) == len(rows[1])
+    assert [r[-1] for r in rows[1:]] == ["1", "0", ""]
 
 
 def test_connect_connects_exactly_the_devices_chosen():

@@ -69,6 +69,11 @@ class Capture:
     #: Where the timeline broke, one flag per sample. A True marks the
     #: first sample after a break.
     gap_before: np.ndarray | None = None
+    #: Whether lead-off detection was running, one flag per sample. A zero in
+    #: `leadoff` means the electrodes were attached only where this is True.
+    #: None for a capture recorded before this was stored, which cannot say
+    #: whether contact was checked at all.
+    leadoff_active: np.ndarray | None = None
 
     @property
     def fs(self) -> float:
@@ -278,12 +283,13 @@ def load(label: str, verify: bool = True, repair: bool = True) -> Capture:
     host_time = z["host_time"]
     ticks = z["device_ticks"] if "device_ticks" in z.files else None
     # Per sample marks: which electrodes the device believed were attached,
-    # and where the timeline broke. They belong to the samples they were
-    # recorded beside, so a repair that drops samples drops these with them.
-    # Reading them separately and pairing them by position afterwards would
-    # put every mark against the wrong sample.
+    # whether it was checking, and where the timeline broke. They belong to
+    # the samples they were recorded beside, so a repair that drops samples
+    # drops these with them. Reading them separately and pairing them by
+    # position afterwards would put every mark against the wrong sample.
     leadoff = z["leadoff"] if "leadoff" in z.files else None
     gap_before = z["gap_before"] if "gap_before" in z.files else None
+    leadoff_active = z["leadoff_active"] if "leadoff_active" in z.files else None
     notes = []
 
     def apply(got):
@@ -291,7 +297,7 @@ def load(label: str, verify: bool = True, repair: bool = True) -> Capture:
         any. Run in order, each on what the one before it left, because
         restamping the clock has to restamp the samples that survived the
         de-duplication rather than the ones that did not."""
-        nonlocal counts, index, host_time, ticks, leadoff, gap_before
+        nonlocal counts, index, host_time, ticks, leadoff, gap_before, leadoff_active
         if got is None:
             return
         fixed, said = got
@@ -304,13 +310,15 @@ def load(label: str, verify: bool = True, repair: bool = True) -> Capture:
         ticks = fixed.get("ticks", ticks)
         leadoff = fixed.get("leadoff", leadoff)
         gap_before = fixed.get("gap_before", gap_before)
+        leadoff_active = fixed.get("leadoff_active", leadoff_active)
 
     if repair:
         apply(_dedupe_delivery(counts, index, host_time, ticks,
-                               dict(leadoff=leadoff, gap_before=gap_before)))
+                               dict(leadoff=leadoff, gap_before=gap_before,
+                                    leadoff_active=leadoff_active)))
         apply(_repin_clock(meta, ticks))
     return Capture(label, counts, index, host_time, meta, notes, ticks,
-                   leadoff, gap_before)
+                   leadoff, gap_before, leadoff_active)
 
 
 def events(label: str) -> list[dict]:

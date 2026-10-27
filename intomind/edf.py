@@ -17,7 +17,7 @@ recording whose electrode offset drifts several mV does not — on
 `berger_on_g12_20260710-040310` the step is **0.13 µV**, against an instrument
 noise floor of 0.29 µV RMS. Noise-floor work reads the `.npz`.
 
-Two things this writer refuses to fake:
+Three things this writer refuses to fake:
 
 * **Time.** Every sample is written at the time it was recorded, counted from
   the sample index. Where samples were lost, the file holds one placeholder
@@ -47,6 +47,12 @@ Two things this writer refuses to fake:
   fitting zero into a signal's range stretches it, so every recorded sample
   in a 16-bit file is rounded more coarsely. `GAP_FILL_UV` holds the choice,
   for a build that prefers zero and accepts that cost.
+
+* **Contact.** A lead-off status of zero is an attached electrode only where
+  detection was running, and nothing at all elsewhere. Where it was running,
+  each stretch a channel's electrode was off carries `BAD_LEADOFF` and the
+  channel, which MNE treats as bad. Where it was not, nothing is written
+  that could read as contact that was checked.
 
 * **The sample rate.** `fs_effective` is not an integer (498.80 SPS on this
   bench). EDF requires an integer number of samples per data record, so the
@@ -93,6 +99,16 @@ SUFFIX = {16: ".edf", 24: ".bdf"}
 #: gives an acquisition gap in its own files, so MNE skips the span when it
 #: filters and rejects an epoch that overlaps it.
 SKIP_LABEL = "BAD_ACQ_SKIP"
+
+#: The annotation over each stretch an electrode was off, followed by the
+#: channel's label. MNE treats any annotation that begins BAD as bad, so it
+#: rejects an epoch that overlaps one.
+LEADOFF_LABEL = "BAD_LEADOFF"
+
+#: The annotation over the part of a recording where lead-off detection was
+#: off, written only when it ran for the rest, so that part does not read as
+#: contact that was checked.
+NOT_CHECKED_LABEL = "LEADOFF_NOT_CHECKED"
 
 #: What a lost sample is written as. None repeats the last recorded value,
 #: which adds no step and costs no precision. A
@@ -244,7 +260,8 @@ def write_edf(path, *, signals: dict[str, np.ndarray], fs: float,
               start: _dt.datetime, index: np.ndarray | None = None,
               events: list[dict] | None = None, patient: str = "X X X X",
               recording: str = "", prefilter: str = "",
-              transducer: str = "", bits: int = 16) -> dict:
+              transducer: str = "", bits: int = 16,
+              stretches: dict[str, np.ndarray] | None = None) -> dict:
     """Write one EDF+ or BDF+ file. Returns a summary of what was written.
 
     `signals` maps label -> µV samples, all the same length. `index` is the
@@ -253,6 +270,12 @@ def write_edf(path, *, signals: dict[str, np.ndarray], fs: float,
     `BAD_ACQ_SKIP` annotation over the hole, and where it steps back, the
     file is refused. `samples_filled` and `gaps` in the summary count them,
     and `tail_filled` the placeholders that complete the last record.
+
+    `stretches` maps an annotation's text to one flag per sample, and each
+    run of flagged samples is written as one annotation of that text over
+    exactly its span. A hole ends a run, because nothing is known about a
+    sample that never arrived. `stretch_counts` in the summary says how many
+    annotations each text got.
 
     `bits` selects the width of the container: 16 for EDF+, 24 for BDF+. Both
     quantize the µV handed in onto an integer grid, so both report the step
@@ -307,8 +330,26 @@ def write_edf(path, *, signals: dict[str, np.ndarray], fs: float,
     holes = [(int(pos[i]) + 1, int(steps[i]) - 1)
              for i in np.nonzero(steps > 1)[0]]
 
+    # Runs of flagged samples, on the file's timeline. The extra place at the
+    # end is never flagged, so a run that reaches the last sample still ends.
+    runs = []
+    stretch_counts = {}
+    for text, flags in (stretches or {}).items():
+        flags = np.asarray(flags, dtype=bool)
+        if len(flags) != n:
+            raise ValueError(f"stretch {text!r} has {len(flags)} flags for "
+                             f"{n} samples")
+        on = np.zeros(used + 1, dtype=np.int8)
+        on[pos[flags]] = 1
+        edge = np.diff(on, prepend=0)
+        these = [(int(a), int(b - a), str(text)) for a, b in
+                 zip(np.nonzero(edge == 1)[0], np.nonzero(edge == -1)[0])]
+        runs += these
+        stretch_counts[str(text)] = len(these)
+
     # Annotations, bucketed into the record whose time span contains them:
-    # the events handed in, one over each hole, and one over the tail.
+    # the events handed in, one over each hole, one over the tail, and one
+    # over each stretch.
     ann: list[list[tuple]] = [[] for _ in range(n_rec)]
     n_events = 0
     for e in events or []:
@@ -320,6 +361,8 @@ def write_edf(path, *, signals: dict[str, np.ndarray], fs: float,
         n_events += 1
     for first, length in holes + ([(span, tail)] if tail else []):
         ann[first // nsr].append((first / fs, length / fs, SKIP_LABEL))
+    for first, length, text in runs:
+        ann[first // nsr].append((first / fs, length / fs, text))
     # widest annotation record decides the annotation signal's size
     annot_bytes = []
     for r in range(n_rec):
@@ -431,6 +474,7 @@ def write_edf(path, *, signals: dict[str, np.ndarray], fs: float,
                 samples_written=n, samples_dropped=0,
                 samples_filled=sum(length for _, length in holes),
                 gaps=len(holes), tail_filled=tail, n_annotations=n_events,
+                stretch_counts=stretch_counts,
                 lossy=True, bits=bits, family=w["family"],
                 quantum_uv=quantum, max_error_uv=max_err)
 
@@ -445,9 +489,15 @@ def export_capture(label: str, path=None, *, load=None, bits: int = 16) -> dict:
     with samples from before the recording's count was reset. The file
     starts at the reset, and `samples_before_restart` says how many samples
     it left out.
+
+    Where the capture says lead-off detection was running, each stretch a
+    channel's electrode was off is labeled `BAD_LEADOFF` and the channel.
+    `contact` says whether contact was checked, as every export says it, and
+    `electrode_off_stretches` how many such labels the file holds.
     """
     from . import analysis as A
     from . import provenance as prov
+    from .export import LEADOFF_CHANNELS, _per_sample, contact_state
 
     cap = (load or A.load)(label)
     ok, problems = prov.verify(label)
@@ -484,6 +534,24 @@ def export_capture(label: str, path=None, *, load=None, bits: int = 16) -> dict:
     # A generated signal's channels say so in their own labels too.
     label_of = (lambda c: f"ch{c+1} synthetic") if cap.meta.get("synthetic") else (lambda c: f"ch{c+1}")
     signals = {label_of(c): cap.uv(c)[skip:] for c in range(cap.nch)}
+
+    # Lead-off, read as every format reads it: a stretch an electrode was
+    # off is labeled only where detection was running, and if it ran for part
+    # of the recording, the rest is labeled too, so that it cannot read as
+    # contact that was checked.
+    found, _ = _per_sample(cap, label, len(index))
+    byte, active = found.get("leadoff"), found.get("leadoff_active")
+    if byte is not None and active is not None:
+        byte = np.asarray(byte, dtype=np.int64)[skip:]
+        active = np.asarray(active, dtype=bool)[skip:]
+    checked = contact_state(byte, active)
+    stretches = {}
+    if checked in ("checked", "partly checked"):
+        for c in range(min(cap.nch, LEADOFF_CHANNELS)):
+            stretches[f"{LEADOFF_LABEL} {label_of(c)}"] = \
+                active & ((byte >> c) & 1).astype(bool)
+        if checked == "partly checked":
+            stretches[NOT_CHECKED_LABEL] = ~active
     rev = cap.meta.get("board_revision", "unknown")
     # Say "lossy" in the file itself when the container is narrower than the
     # resolution the capture was recorded at, and only then. The width of the
@@ -502,7 +570,7 @@ def export_capture(label: str, path=None, *, load=None, bits: int = 16) -> dict:
         path = out / f"{label}{SUFFIX.get(bits, '.edf')}"
     out = write_edf(
         path, signals=signals, fs=cap.fs, start=start, index=index[skip:],
-        events=events, bits=bits,
+        events=events, bits=bits, stretches=stretches,
         # The DEVICE that made it, from the capture's own manifest. This used
         # to be one hardcoded name, which put it in the header of every
         # export, including recordings from a different device.
@@ -514,6 +582,9 @@ def export_capture(label: str, path=None, *, load=None, bits: int = 16) -> dict:
         transducer=_transducer_of(cap.meta))
     out["label"] = label
     out["samples_before_restart"] = skip
+    out["contact"] = checked
+    out["electrode_off_stretches"] = sum(
+        v for k, v in out["stretch_counts"].items() if k.startswith(LEADOFF_LABEL))
     out["board_revision"] = rev
     return out
 
