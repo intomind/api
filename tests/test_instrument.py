@@ -408,7 +408,7 @@ def test_a_manifest_says_what_the_samples_were_off_the_packets():
                                    index=np.arange(10), gaps_in_run=0)
     m = manifest(generated[:1])
     assert (m["signal_source"], m["synthetic"]) == ("synthetic", True)
-    assert m["manifest_version"] == 6
+    assert m["manifest_version"] == 7
     m = manifest(measured[:1])
     assert (m["signal_source"], m["synthetic"]) == ("test", False)
     m = manifest(measured[:1] + generated[:1])

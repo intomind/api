@@ -576,6 +576,34 @@ def test_every_sample_says_whether_lead_off_detection_was_running():
     assert seen == {True, False}, "samples of both kinds"
 
 
+def test_the_lead_off_setting_is_unknown_until_set_or_streamed():
+    """The status read carries the lead-off status byte, not the detection
+    setting, and the protocol has no read for the setting. So it is None
+    until this host sets it or a packet declares it, and the status byte is
+    reported beside it under its own name."""
+    from test_protocol import by_kind
+    dev, link = _device(ALL_1_1, _answers())
+    cfg = asyncio.run(dev.refresh_config())
+    assert cfg["leadoff"] is None, "a status byte was reported as the setting"
+    assert "leadoff_status" in cfg
+    asyncio.run(dev.set_leadoff(True))
+    assert dev.config["leadoff"] is True
+    assert asyncio.run(dev.refresh_config())["leadoff"] is True
+    asyncio.run(dev.set_leadoff(False))
+    assert asyncio.run(dev.refresh_config())["leadoff"] is False
+    # Two different packets, because a packet seen twice is dropped as a copy.
+    first, second = list(by_kind("eeg_data"))[:2]
+    dev.on_sample = lambda _d, s: None
+    raw = bytearray(bytes.fromhex(first["bytes"]))
+    raw[1] |= P.DATA_FLAGS["leadoff_active"]
+    dev._on_data(None, bytes(raw))
+    assert dev.config["leadoff"] is True, "a packet that says detection ran did not set the setting"
+    raw = bytearray(bytes.fromhex(second["bytes"]))
+    raw[1] &= ~P.DATA_FLAGS["leadoff_active"] & 0xFF
+    dev._on_data(None, bytes(raw))
+    assert asyncio.run(dev.refresh_config())["leadoff"] is False
+
+
 def test_a_refusal_on_usb_power_says_to_unplug():
     """1.4: a stream refused while USB power is present is a typed refusal
     whose words say what to do, and still read `-> status 7`."""

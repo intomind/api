@@ -378,6 +378,9 @@ class Device:
         self._frame_offset = 0.0
         self._frame_mono = None
         self._gain = 6
+        #: The lead-off detection setting, as last set by this host or as the
+        #: last packet declared it. None until either has said.
+        self._leadoff_setting: Optional[bool] = None
         self._expected_idx = None
         self.samples_total = 0
         self.gaps_announced = 0
@@ -787,6 +790,9 @@ class Device:
         """
         self._require("leadoff", "detect lead-off")
         await self.command(OP["SET_LEADOFF"], 1 if on else 0)
+        self._leadoff_setting = bool(on)
+        if isinstance(getattr(self, "config", None), dict):
+            self.config["leadoff"] = bool(on)
 
     async def battery(self) -> "P.Battery":
         """What the battery is doing, when the device can measure it."""
@@ -1254,8 +1260,14 @@ class Device:
         adapter.
         """
         st = await self.read_status()
+        # `st.leadoff` is the lead-off status byte, one bit per electrode. It
+        # is not the detection setting, and the protocol has no read for the
+        # setting: it is known only from this host's own SET_LEADOFF and from
+        # the flag every packet carries while streaming. Until one of those
+        # has said, `leadoff` is None, unknown, never guessed.
         self.config = dict(gain=st.gain, rate_sps=st.sample_rate_hz,
-                           mode=st.mode, leadoff=bool(st.leadoff))
+                           mode=st.mode, leadoff=self._leadoff_setting,
+                           leadoff_status=st.leadoff)
         self._gain = st.gain or self._gain
         if self.can("pipeline"):
             chain = await self.pipeline()
@@ -1393,6 +1405,11 @@ class Device:
             # devices stays a comparison.
             lsb_uv = self.info.microvolts_per_count(pkt.gain)
             tick_per = self.info.tick_hz / pkt.sample_rate_hz if pkt.sample_rate_hz else 0
+            # The packet says whether detection was running: the one read of
+            # the setting the protocol offers.
+            self._leadoff_setting = bool(pkt.leadoff_active)
+            if isinstance(getattr(self, "config", None), dict):
+                self.config["leadoff"] = self._leadoff_setting
             for i, row in enumerate(pkt.counts):
                 dt = int(pkt.device_time + i * tick_per)
                 self.on_sample(self, Sample(

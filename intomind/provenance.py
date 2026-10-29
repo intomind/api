@@ -145,7 +145,12 @@ def use_captures_dir(path) -> pathlib.Path:
 #   measuring it (protocol 1.3). Before this a generated recording said so
 #   only in the configuration its recorder happened to read. Older manifests
 #   read as null for both.
-MANIFEST_VERSION = 6
+# v7 (2026-10-29): the npz beside the manifest carries `leadoff_active`, whether
+#   lead-off detection was running at each sample, read off the packet that
+#   carried it. A lead-off byte of zero means every electrode was attached only
+#   when detection ran, and before this nothing in a recording told the two
+#   apart. Older recordings have no such array and read as not known.
+MANIFEST_VERSION = 7
 
 
 # ---------------------------------------------------------------- hashing
