@@ -142,15 +142,11 @@ def test_a_hole_is_filled_and_every_sample_keeps_its_time():
     assert info["continuity"] == h["reserved"] == "EDF+C"
     assert info["gaps"] == 1 and info["samples_filled"] == 1000, info
 
-    # The hole is 1000 places at the lowest number the file can store, the
-    # tail that completes the last record is the same number, and no
-    # recorded sample is that number.
+    # The hole is 1000 places repeating the last sample before it, and the
+    # tail that completes the last record repeats the last sample of all.
     d = digital(p)
-    hole = np.zeros(len(d), bool)
-    hole[1500:2500] = True
-    hole[4000:] = True
     assert info["tail_filled"] == len(d) - 4000, info
-    assert np.all(d[hole] == -32768) and not np.any(d[~hole] == -32768)
+    assert np.all(d[1500:2500] == d[1499]) and np.all(d[4000:] == d[3999])
 
     # Every recorded sample sits at its own index, in the file and in time.
     pmin, pmax = h["phys_min"][0], h["phys_max"][0]
@@ -195,24 +191,30 @@ def test_zero_for_holes_is_one_setting_and_costs_range():
     assert step > 1500 / 65535, "the range did not stretch to hold zero"
 
 
-def test_no_recorded_sample_can_be_the_hole_value():
-    """The margin below each signal's lowest sample keeps the lowest number
-    for holes, at the extremes too: a flat signal and a signal at the very
-    bottom of its own range."""
-    for name, x in (("flat", np.full(1500, 42.0)),
-                    ("ramp", np.linspace(-5000.0, 5000.0, 1500))):
-        idx = np.concatenate([np.arange(750), np.arange(750) + 760])
-        p = tmp() / f"e4_{name}.edf"
-        info = edf.write_edf(p, signals={"ch1": x}, fs=FS, start=START, index=idx)
-        d = digital(p)
-        assert np.sum(d == -32768) == 10 + info["tail_filled"], (name, np.sum(d == -32768))
+def test_a_placeholder_adds_no_step_and_no_range():
+    """A value apart from the signal is a step a filter or a spectrum takes
+    for signal, so a placeholder repeats the last value: no sample to sample
+    change is larger than the recording's own, and the range is the
+    recording's own."""
+    t = np.arange(1500) / FS
+    x = -4200.0 + 30.0 * np.sin(2 * np.pi * 10 * t)
+    idx = np.concatenate([np.arange(750), np.arange(750) + 760])
+    p = tmp() / "e4.edf"
+    info = edf.write_edf(p, signals={"ch1": x}, fs=FS, start=START, index=idx)
+    h = parse_header(p.read_bytes())
+    d = digital(p)
+    assert info["samples_filled"] == 10 and info["tail_filled"] > 0, info
+    assert np.max(np.abs(np.diff(d))) <= np.max(np.abs(np.diff(d[idx]))), \
+        "a placeholder made a step the recording does not have"
+    assert h["phys_min"][0] >= x.min() - 0.02 * (x.max() - x.min()) - 0.1, h["phys_min"]
+    assert h["phys_max"][0] <= x.max() + 0.02 * (x.max() - x.min()) + 0.1, h["phys_max"]
 
 
 def test_the_stated_range_holds_every_sample_however_far_from_zero():
     """The header states each bound in eight characters, which cannot hold
     every number exactly. A bound rounded toward the samples can land inside
-    the margin, and the lowest sample is then written as the bound, or, with
-    a hole in the file, as the hole. The bounds are moved outward instead."""
+    the margin, and the lowest sample is then written as the bound. The
+    bounds are moved outward instead."""
     rng = np.random.default_rng(7)
     idx = np.concatenate([np.arange(750), np.arange(750) + 760])
     for name, x in (("quiet far below zero", -150000.4 + rng.normal(0, 0.3, 1500)),
@@ -224,7 +226,6 @@ def test_the_stated_range_holds_every_sample_however_far_from_zero():
         pmin, pmax = h["phys_min"][0], h["phys_max"][0]
         assert pmin <= x.min() and pmax >= x.max(), (name, pmin, x.min(), x.max(), pmax)
         d = digital(p)
-        assert np.sum(d == -32768) == 10 + info["tail_filled"], (name, np.sum(d == -32768))
         uv = (d - (-32768)) * (pmax - pmin) / 65535 + pmin
         kept = idx < len(d)
         assert np.max(np.abs(uv[idx[kept]] - x[kept])) <= (pmax - pmin) / 65535, name
@@ -266,7 +267,8 @@ def test_the_last_record_is_completed_and_labeled():
     assert info["samples_written"] == 1200 and info["tail_filled"] == 297, info
     d = digital(p)
     assert len(d) == 1497
-    assert np.all(d[1200:] == -32768) and not np.any(d[:1200] == -32768)
+    assert np.all(d[1200:] == d[1199]), "the last record does not repeat the last sample"
+    assert info["samples_dropped"] == 0, info
     skip = [(t, dur) for t, dur, text in annotations(p) if text == edf.SKIP_LABEL]
     assert len(skip) == 1, skip
     assert abs(skip[0][0] - 1200 / FS) < 1e-5 and abs(skip[0][1] - 297 / FS) < 1e-5, skip

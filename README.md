@@ -126,20 +126,22 @@ Where samples were lost, the file holds one placeholder for each of them,
 under a `BAD_ACQ_SKIP` annotation that covers the hole. MNE reads that label
 as its own: it filters each side of a hole separately, rejects an epoch that
 overlaps one, and returns the hole as NaN when asked. A reader that does not
-know the label shows a hole as a flat line at the bottom of the signal's
-range. These files are whole records of about a second, and the last record
-is completed after the last sample with the same placeholder under the same
-label, as MNE's own writer completes it, so no recorded sample is cut.
-`tail_filled` says how many placeholders that took.
+know the label shows a hole as a flat line at the last value before it.
+These files are whole records of about a second, and the last record is
+completed after the last sample with placeholders under the same label, as
+MNE's own writer completes it, so no recorded sample is cut. `tail_filled`
+says how many placeholders that took, and `samples_dropped` is 0.
 
-The placeholder is the lowest number the file can store. NaN is not
-possible, because these formats store whole numbers. Zero is possible, but
-each signal's range would have to stretch to reach it, and most recordings
-sit thousands of microvolts from zero, so every recorded sample in a 16-bit
-file would be rounded more coarsely. The lowest number costs nothing, and
-no recorded sample can be it, because each range leaves a margin below the
-signal's lowest sample. A build that prefers zero sets
-`edf.GAP_FILL_UV = 0.0` and takes on that cost.
+The placeholder repeats the last recorded value, as MNE's own writer does.
+NaN is not possible, because these formats store whole numbers. A value that
+stands apart from the signal, such as the lowest number the file can store,
+is a step thousands of microvolts deep, and a filter or a spectrum that does
+not read the label takes it for signal. The last value adds no step and
+costs no precision. Zero is possible, but each signal's range would have to
+stretch to reach it, and most recordings sit thousands of microvolts from
+zero, so every recorded sample in a 16-bit file would be rounded more
+coarsely. A build that prefers zero sets `edf.GAP_FILL_UV = 0.0` and takes
+on that cost.
 
 A recording whose sample count starts again within its first second begins
 with samples from before the recording started. `bdf` and `edf` start at

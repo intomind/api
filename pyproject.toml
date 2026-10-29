@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "intomind"
-version = "1.4.0"
+version = "1.4.1"
 description = "The IntoMind instrument API: the protocol, the recording, its provenance, and the analyses that read it back"
 readme = "README.md"
 requires-python = ">=3.11"

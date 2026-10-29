@@ -396,7 +396,8 @@ def test_a_gap_keeps_every_sample_at_its_time_in_both_containers():
         assert s["gaps"] == 1 and s["samples_filled"] == 5, s
         h, sig = read_signals(pathlib.Path(s["path"]), sample_bytes)
         x = sig["ch1"]
-        assert np.all(x[750:755] == h["phys_min"][0]), "the hole is not the bottom of the range"
+        assert np.all(x[750:755] == x[749]), "the hole does not repeat the last value"
+        assert s["samples_dropped"] == 0, s
         kept = idx < len(x)
         err = float(np.max(np.abs(x[idx[kept]] - cap.uv(0)[kept])))
         assert err <= s["max_error_uv"] * 1.01 + 1e-9, (fmt, err)

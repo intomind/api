@@ -26,24 +26,27 @@ Two things this writer refuses to fake:
   That is the label MNE gives a hole in its own files: it filters each side
   of one separately, rejects an epoch that overlaps one, and returns NaN there
   when asked (`get_data(reject_by_annotation="NaN")`). A reader that does not
-  know the label shows a hole as a flat line at the bottom of the signal's
-  range. Writing the samples after a hole straight on from the ones before
-  it would put them early by the length of the hole, and so would a record
-  onset that skips the hole, because a reader such as MNE takes the records
-  end to end. The file is whole records, and the last one is completed after
-  the last sample with the same placeholder under the same label, as MNE's
-  own writer completes it, so no recorded sample is cut. A sample index that
-  steps back is a break whose length is not known, and the file is refused
-  rather than given a timeline the recording does not have.
+  know the label shows a hole as a flat line at the last value before it.
+  Writing the samples after a hole straight on from the ones before it would
+  put them early by the length of the hole, and so would a record onset that
+  skips the hole, because a reader such as MNE takes the records end to end.
+  The file is whole records, and the last one is completed after the last
+  sample with placeholders under the same label, as MNE's own writer
+  completes it, so no recorded sample is cut. A sample index that steps back
+  is a break whose length is not known, and the file is refused rather than
+  given a timeline the recording does not have.
 
-  A placeholder is the lowest number the file can store, not zero and not
-  NaN. The format holds whole numbers only, so NaN cannot be written. Each
-  signal's range is fitted to that signal with a margin below its lowest
-  sample, so no recorded sample can be the lowest number, and using it costs
-  nothing. Zero costs precision: most recordings sit thousands of microvolts
-  from zero, and fitting zero into a signal's range stretches it, so every
-  recorded sample in a 16-bit file is rounded more coarsely. `GAP_FILL_UV`
-  holds the choice, for a build that prefers zero and accepts that cost.
+  A placeholder repeats the last recorded value, which is what MNE's own
+  writer puts in the block it completes. The format holds whole numbers
+  only, so NaN cannot be written. Any value that stands apart from the
+  signal, such as the lowest number the file can store, is a step thousands
+  of microvolts deep, and a filter or a spectrum that does not read the
+  label takes the step for signal. The last value adds no step, and it costs
+  no precision, because it is already inside the signal's range. Zero costs
+  precision: most recordings sit thousands of microvolts from zero, and
+  fitting zero into a signal's range stretches it, so every recorded sample
+  in a 16-bit file is rounded more coarsely. `GAP_FILL_UV` holds the choice,
+  for a build that prefers zero and accepts that cost.
 
 * **The sample rate.** `fs_effective` is not an integer (498.80 SPS on this
   bench). EDF requires an integer number of samples per data record, so the
@@ -91,8 +94,8 @@ SUFFIX = {16: ".edf", 24: ".bdf"}
 #: filters and rejects an epoch that overlaps it.
 SKIP_LABEL = "BAD_ACQ_SKIP"
 
-#: What a lost sample is written as. None writes the lowest number the file
-#: can store, which no recorded sample can be and which costs no precision. A
+#: What a lost sample is written as. None repeats the last recorded value,
+#: which adds no step and costs no precision. A
 #: number of microvolts writes that instead, and the range of every signal is
 #: stretched to hold it wherever there is a hole or a last record to
 #: complete, which is nearly every file. 0.0 writes zeros, and a
@@ -384,26 +387,24 @@ def write_edf(path, *, signals: dict[str, np.ndarray], fs: float,
     ])
     assert len(sig) == 256 * ns, len(sig)
 
-    # Every recorded sample goes where it belongs, and every place in a hole
-    # holds the placeholder.
+    # Every recorded sample goes where it belongs, and every place no sample
+    # holds repeats the last recorded value before it. The first place always
+    # holds a sample, so every placeholder has one to repeat.
+    last = np.full(used, -1, dtype=np.int64)
+    last[pos] = np.arange(n)
+    last = np.maximum.accumulate(last)
     dig, real = {}, {}
     for lbl in labels:
         pmin, pmax = ranges[lbl]
         real[lbl] = _digitize(np.asarray(signals[lbl]), pmin, pmax,
                               dmin=dmin, dmax=dmax)
         if fill is None:
-            hole = dmin
-            # The margin below the lowest sample keeps every recorded sample
-            # off the lowest number. One on it could not be told from a hole,
-            # so that is checked here rather than assumed.
-            if filled and np.any(real[lbl] == dmin):
-                raise RuntimeError(f"signal {lbl}: a recorded sample landed on "
-                                   f"the number that marks a hole")
+            dig[lbl] = real[lbl][last].astype("<i4")
         else:
             hole = int(_digitize(np.array([fill]), pmin, pmax,
                                  dmin=dmin, dmax=dmax)[0])
-        dig[lbl] = np.full(used, hole, dtype="<i4")
-        dig[lbl][pos] = real[lbl]
+            dig[lbl] = np.full(used, hole, dtype="<i4")
+            dig[lbl][pos] = real[lbl]
 
     # What this file cost, measured on the file itself: the step each signal
     # was put on, and the worst distance between a sample handed in and the
@@ -427,7 +428,7 @@ def write_edf(path, *, signals: dict[str, np.ndarray], fs: float,
 
     return dict(path=str(path), n_records=n_rec, samples_per_record=nsr,
                 record_duration_s=dur, continuity=reserved, fs=float(fs),
-                samples_written=n,
+                samples_written=n, samples_dropped=0,
                 samples_filled=sum(length for _, length in holes),
                 gaps=len(holes), tail_filled=tail, n_annotations=n_events,
                 lossy=True, bits=bits, family=w["family"],

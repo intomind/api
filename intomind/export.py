@@ -278,6 +278,7 @@ def _export_edf_family(label: str, path, load, bits: int) -> dict:
         counts_recovered=recovered, max_error_uv=info["max_error_uv"],
         quantum_uv=info["quantum_uv"], lsb_uv=lsb, bits=info["bits"],
         family=info["family"], continuity=info["continuity"],
+        samples_dropped=info["samples_dropped"],
         samples_filled=info["samples_filled"], gaps=info["gaps"],
         tail_filled=info["tail_filled"],
         samples_before_restart=info["samples_before_restart"],
@@ -295,6 +296,8 @@ def export_edf(label: str, path=None, *, load=None) -> dict:
     Samples are written in whole data records. The last record is completed
     after the last sample with placeholders under a `BAD_ACQ_SKIP`
     annotation, as `edf.py` describes, and `tail_filled` says how many.
+    `samples_dropped`, which counted the samples left out of that record
+    before 1.4.1, is now always 0.
     """
     return _export_edf_family(label, path, load, 16)
 
