@@ -1265,8 +1265,10 @@ class Device:
         # setting: it is known only from this host's own SET_LEADOFF and from
         # the flag every packet carries while streaming. Until one of those
         # has said, `leadoff` is None, unknown, never guessed.
+        # Read with getattr: a device object built without this constructor,
+        # as a test's stub is, has no setting yet and must read as unknown.
         self.config = dict(gain=st.gain, rate_sps=st.sample_rate_hz,
-                           mode=st.mode, leadoff=self._leadoff_setting,
+                           mode=st.mode, leadoff=getattr(self, "_leadoff_setting", None),
                            leadoff_status=st.leadoff)
         self._gain = st.gain or self._gain
         if self.can("pipeline"):
