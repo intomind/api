@@ -348,6 +348,29 @@ def test_align_events_refuses_to_fake_a_correction():
     approx(out[0]["host_time_aligned"], 12.0)
 
 
+def test_the_clock_fit_is_the_same_bits_everywhere():
+    """The fit sums exactly and roots with sqrt. Python's own `sum` adds floats
+    one way before 3.12 and another way after, and `**` is the platform's pow,
+    which misses by a bit at times, so the same exchanges were fitted to
+    different bits by different machines and could not be matched by the
+    SDKs held to this library."""
+    import inspect, math, re
+    from intomind import client
+    for f in (client.Device._fit_clock, client.Device._reject_skew, client.Device.clock_quality):
+        code = "\n".join(line.split("#")[0] for line in inspect.getsource(f).splitlines())
+        assert not re.search(r"(?<![\w.])sum\(", code), f"{f.__name__} adds with sum"
+        assert not re.search(r"\*\*\s*[\d(]", code), f"{f.__name__} raises to a power with **"
+    # Exchanges where adding one way and adding exactly disagree.
+    d = _dev_with_syncs([(1e9 + 0.1 * i, 1e9 + 0.1 * i + (1e-7 if i % 2 else 0.0), 0.004) for i in range(7)])
+    ds = [s.device for s in d._syncs]
+    hs = [s.mono for s in d._syncs]
+    n = len(ds)
+    dbar, hbar = math.fsum(ds) / n, math.fsum(hs) / n
+    sdd = math.fsum((x - dbar) * (x - dbar) for x in ds)
+    sdh = math.fsum((x - dbar) * (y - hbar) for x, y in zip(ds, hs))
+    assert d._learned["skew"] == sdh / sdd or d._learned["pinned"] is not None
+
+
 def test_manifest_carries_clock_quality():
     from intomind import provenance as prov
     d = _dev_with_syncs([(0.0, 0.0, 0.004), (60.0, 60.0, 0.006)])

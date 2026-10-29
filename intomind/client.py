@@ -12,7 +12,7 @@ off `device.extra`. See `adapters`.
 """
 from __future__ import annotations
 import asyncio
-import warnings, struct, time
+import math, warnings, struct, time
 from collections import deque
 from dataclasses import dataclass, field
 from typing import Callable, NamedTuple, Optional
@@ -597,9 +597,14 @@ class Device:
         else:
             hs = [s.mono for s in self._syncs]
             ds = [s.device for s in self._syncs]
-            dbar, hbar = sum(ds) / n, sum(hs) / n
-            sdd = sum((d - dbar) ** 2 for d in ds)
-            sdh = sum((d - dbar) * (h - hbar) for d, h in zip(ds, hs))
+            # Summed exactly, squared by multiplying, rooted by sqrt: each
+            # is the same bits on every Python and every platform, and in
+            # every implementation held to this one. `sum` and `**` are
+            # not: `sum` changed how it adds floats in Python 3.12, and
+            # `**` is the platform's pow, which misses by a bit at times.
+            dbar, hbar = math.fsum(ds) / n, math.fsum(hs) / n
+            sdd = math.fsum((d - dbar) * (d - dbar) for d in ds)
+            sdh = math.fsum((d - dbar) * (h - hbar) for d, h in zip(ds, hs))
             skew = (sdh / sdd) if sdd > 0 else 1.0
             offset = hbar - skew * dbar
             pinned = self._reject_skew(skew, offset, sdd, n)
@@ -644,8 +649,8 @@ class Device:
         if n <= 2:
             return "two exchanges: a slope with no residual to check it"
         resid = [(s.mono - (skew * s.device + offset)) for s in self._syncs]
-        sse = sum(r * r for r in resid)
-        se_ppm = (((sse / (n - 2)) / sdd) ** 0.5) * 1e6   # stderr of the slope
+        sse = math.fsum(r * r for r in resid)
+        se_ppm = math.sqrt((sse / (n - 2)) / sdd) * 1e6   # stderr of the slope
         if se_ppm > MAX_SKEW_STDERR_PPM:
             span = max(s.device for s in self._syncs) - min(
                 s.device for s in self._syncs)
@@ -693,7 +698,7 @@ class Device:
             out["span_s"] = self._syncs[-1].device - self._syncs[0].device
             errs = [m - (self._skew * d + self._offset)
                     for m, d in ((s.mono, s.device) for s in self._syncs)]
-            out["residual_ms"] = (sum(e * e for e in errs) / n) ** 0.5 * 1e3
+            out["residual_ms"] = math.sqrt(math.fsum(e * e for e in errs) / n) * 1e3
         # WHAT THE EXCHANGES SAY VERSUS WHAT THE SAMPLES WERE STAMPED WITH.
         # They are the same number except across a recording, where the map is
         # held still while the exchanges keep arriving (see `start`). The
