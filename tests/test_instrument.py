@@ -385,6 +385,30 @@ def test_a_manifest_reads_the_gain_and_rate_off_the_packets_it_was_given():
     assert m["rate_sps"] == 500, "the rate the packets carry"
 
 
+def test_a_manifest_lists_what_a_run_changed_in_key_order():
+    """The registers or settings a run changed are listed in key order. They
+    came out of a set, in an order that changes from one run of Python to the
+    next, so the same recording was not the same bytes twice."""
+    from intomind import provenance as prov
+    d = _dev_with_syncs([(0.0, 0.0, 0.004), (60.0, 60.0, 0.006)])
+    d.info = type("I", (), {"tick_hz": 32768.0, "fw": "1.1.0",
+                            "device_id": "x", "vref_uv": 2420000})()
+    d.gaps_announced = 0
+    d.fs_effective = lambda pkts: 500.0
+    before = {k: 0 for k in ("reg_e", "reg_b", "reg_d", "reg_a", "reg_c")}
+    after = {k: 1 for k in before}
+    m = prov.build_manifest(label="t", dev=d, packets=[], regs_before=before,
+                            regs_after=after, protocol="t", params={}, extra={},
+                            index=np.arange(10), gaps_in_run=0)
+    assert list(m["regs_diff"]) == sorted(before), list(m["regs_diff"])
+    m = prov.build_manifest(label="t", dev=d, packets=[], regs_before=None,
+                            regs_after=None, protocol="t", params={},
+                            extra=dict(config_before=dict(rate_sps=250, gain=24, mode="normal")),
+                            index=np.arange(10), gaps_in_run=0,
+                            config_after=dict(rate_sps=500, gain=12, mode="normal"))
+    assert list(m["regs_diff"]) == ["gain", "rate_sps"], list(m["regs_diff"])
+
+
 def test_a_manifest_says_what_the_samples_were_off_the_packets():
     """A generated signal is marked where it was recorded, from the packets
     that carried it, not from a setting a recorder may not have read."""

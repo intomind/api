@@ -668,14 +668,16 @@ def build_manifest(*, label, dev, packets, regs_before, regs_after,
     # adapter supplies them. Otherwise the answer is the configuration the
     # device reports, read before the run and again after it.
     config_before = extra.get("config_before")
+    # In key order, so the same run is the same bytes every time it is
+    # written, in every language that writes it.
     diff = {}
     if regs_before and regs_after:
         diff = {k: [regs_before.get(k), regs_after.get(k)]
-                for k in set(regs_before) | set(regs_after)
+                for k in sorted(set(regs_before) | set(regs_after))
                 if regs_before.get(k) != regs_after.get(k)}
     elif config_before and config_after:
         diff = {k: [config_before.get(k), config_after.get(k)]
-                for k in set(config_before) | set(config_after)
+                for k in sorted(set(config_before) | set(config_after))
                 if config_before.get(k) != config_after.get(k)}
     m = dict(
         manifest_version=MANIFEST_VERSION,
