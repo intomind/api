@@ -476,8 +476,12 @@ def _mat_write(f, name: str, a) -> None:
 
 
 def _mat_string(f, name: str, s: str) -> None:
-    """A MATLAB char array, which is UTF-16 code units and an attribute."""
-    a = np.frombuffer(s.encode("utf-16-le"), dtype=np.uint16).reshape(1, -1)
+    """A MATLAB char array, which is UTF-16 code units and an attribute.
+
+    Text in MATLAB is one row of characters. Written here as one column, it
+    opens as that row, which is how MATLAB's own files hold text.
+    """
+    a = np.frombuffer(s.encode("utf-16-le"), dtype=np.uint16).reshape(-1, 1)
     ds = f.create_dataset(name, data=a)
     ds.attrs["MATLAB_class"] = np.bytes_(b"char")
     ds.attrs["MATLAB_int_decode"] = np.int64(2)
@@ -487,8 +491,8 @@ def export_mat(label: str, path=None, *, load=None) -> dict:
     """MATLAB v7.3, which is an HDF5 file with MATLAB's attributes on it.
 
     Microvolts go in as one float64 matrix that opens as samples by channels,
-    with the clocks and the marks beside it as columns and the manifest as a
-    char array. The values are written at the width they are already computed
+    with the clocks and the marks beside it as columns and the manifest as one
+    row of text. The values are written at the width they are already computed
     at, so nothing is rounded on the way out.
 
     v7.3 rather than v7: v7 needs scipy and a MAT-file writer, and it holds

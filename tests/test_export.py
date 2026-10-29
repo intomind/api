@@ -590,6 +590,8 @@ def test_mat_is_an_hdf5_file_that_matlab_will_open():
         assert uv.shape == (2, 1500), uv.shape   # MATLAB reads 1500 by 2
         assert uv.attrs["MATLAB_class"] == b"double"
         assert f["manifest_json"].attrs["MATLAB_class"] == b"char"
+        text = f["manifest_json"]
+        assert text.ndim == 2 and text.shape[1] == 1, text.shape   # MATLAB reads one row
         meta = json.loads(np.asarray(f["manifest_json"]).astype(np.uint16)
                           .tobytes().decode("utf-16-le"))
         for c in range(cap.nch):
