@@ -106,6 +106,10 @@ def _prepare(label: str, path, load, fmt: str):
     if not ok:
         raise ValueError(f"refusing to export {label}: " + "; ".join(problems))
     cap = (load or _analysis().load)(label)
+    # A recorder armed and stopped before a packet came keeps a recording
+    # with no samples, which no format has anything to hold.
+    if np.asarray(cap.counts).size == 0:
+        raise ValueError(f"refusing to export {label}: it holds no samples")
     return cap, _path_for(label, path, fmt), list(problems)
 
 

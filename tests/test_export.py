@@ -518,6 +518,33 @@ def test_csv_export_calls_uv_as_the_method_it_is():
 
 
 # ---------------------------------------------------------------- the gate
+def test_a_recording_with_no_samples_is_refused_by_every_format_in_the_same_words():
+    """A recorder armed and stopped before a packet came keeps a recording
+    with no samples. Four formats raised an IndexError on it, and BDF and EDF
+    named a missing rate, when what is missing is the samples."""
+    label = "t_empty"
+    np.savez_compressed(
+        pathlib.Path(A.CAPTURES) / f"{label}.npz",
+        counts=np.array([], dtype=np.int64), index=np.array([], dtype=np.int64),
+        device_ticks=np.array([], dtype=np.int64), host_time=np.array([], dtype=np.float64),
+        leadoff=np.array([], dtype=np.uint8), gap_before=np.array([], dtype=bool),
+        leadoff_active=np.array([], dtype=bool))
+    (pathlib.Path(A.CAPTURES) / f"{label}.meta.json").write_text(json.dumps(dict(
+        label=label, n=0, fs_effective=0.0, vref_uv=VREF_UV, gain=None, rate_sps=None, adc_bits=ADC_BITS)))
+    prov.write_checksums(label)
+    assert A.load(label).nch == 0, "it still reads"
+    d = work("empty")
+    for fmt in X.FORMATS:
+        out = d / f"x{X.SUFFIX[fmt]}"
+        try:
+            X.export(label, fmt, out)
+        except ValueError as e:
+            assert str(e) == f"refusing to export {label}: it holds no samples", (fmt, e)
+            assert not out.exists(), f"{fmt} wrote a file anyway"
+            continue
+        raise AssertionError(f"{fmt} exported a recording with no samples")
+
+
 def test_a_capture_that_fails_verification_is_refused_by_every_format():
     """An export is regenerable and the capture it came from is not, so a
     recording that reports damage is not copied into six files that no longer
