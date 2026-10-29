@@ -531,6 +531,24 @@ def test_a_packet_delivered_twice_is_counted_once():
         assert dev.duplicates == 2 and dev.samples_total > n
 
 
+def test_the_rate_from_packets_reads_their_own_index():
+    """A recording of fewer than two samples takes its rate from its first and
+    last packets. That read asked a packet for a `first_index` it does not
+    have, so such a recording raised instead of being saved."""
+    import types
+    from intomind import client, protocol as P
+    dev = client.Device(types.SimpleNamespace(address="EE:AE:00:00:00:01", name="IntoMind One", details={}))
+    dev.info = types.SimpleNamespace(tick_hz=1_000_000)
+
+    def packet(index, device_time):
+        return P.Packet(discontinuity=False, leadoff_active=False, mode="normal", usb_present=False,
+                        samples_lost_before=0, index=index, device_time=device_time, leadoff=0,
+                        gain=24, sample_rate_hz=500, counts=[])
+    assert dev.fs_effective([packet(0, 0), packet(500, 1_000_000)]) == 500.0
+    assert dev.fs_effective([packet(7, 5)]) == 0.0
+    assert dev.fs_effective([packet(0, 5), packet(9, 5)]) == 0.0
+
+
 def test_a_generated_sample_says_so_and_a_measured_one_does_not():
     """1.3: every sample from a synthetic packet carries the mark, so a
     consumer of samples alone can still tell a generated signal from a

@@ -1437,4 +1437,4 @@ class Device:
             return 0.0
         p0, p1 = packets[0], packets[-1]
         span = (p1.device_time - p0.device_time) / self.info.tick_hz
-        return (p1.first_index - p0.first_index) / span if span > 0 else 0.0
+        return (p1.index - p0.index) / span if span > 0 else 0.0
