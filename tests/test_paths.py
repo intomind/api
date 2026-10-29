@@ -130,7 +130,7 @@ def test_a_capture_label_cannot_walk_out_of_its_directory():
     inside = (root / "captures").resolve()
 
     for bad in ["../escaped", "..", "a/b", "/etc/passwd", "", ".hidden", "x" * 200,
-                "with space", "semi;colon", "null\x00byte"]:
+                "with space", "semi;colon", "null\x00byte", "newline\n", "newline\nat-the-end"]:
         try:
             prov.check_label(bad)
         except ValueError:

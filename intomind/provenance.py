@@ -64,7 +64,9 @@ def check_label(label: str) -> str:
     and the three separators that read well, starting with a letter or a
     digit.
     """
-    if not isinstance(label, str) or not LABEL.match(label):
+    # The whole label, to its last character: `$` in `match` also accepts
+    # a newline at the end, and a newline would become part of a filename.
+    if not isinstance(label, str) or not LABEL.fullmatch(label):
         raise ValueError(
             f"{label!r} is not a capture label. A label is letters, digits, "
             "dots, dashes and underscores, starts with a letter or a digit, "
