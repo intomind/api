@@ -262,7 +262,7 @@ def _repin_clock(meta, ticks):
 def load(label: str, verify: bool = True, repair: bool = True) -> Capture:
     """Load a capture, refusing silently-corrupted bytes.
 
-    A capture recorded before P0 has no checksum file; it loads with a warning
+    A capture recorded before checksums were kept has no checksum file; it loads with a warning
     rather than an error, because most of this project's data predates it.
     A capture *with* a checksum that no longer matches is a hard error: an
     analysis must never quietly read bytes other than the ones recorded.

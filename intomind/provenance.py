@@ -259,7 +259,7 @@ def verify(label: str) -> tuple[bool, list[str]]:
         return True, ["provenance incomplete: recorded before checksums "
                       "existed; unchanged since it was marked, but its bytes "
                       "at recording time were never attested"]
-    return True, ["unverified: no checksum file, not marked (recorded before P0)"]
+    return True, ["unverified: no checksum file, not marked (recorded before checksums were kept)"]
 
 
 def mark_legacy(label: str, board_revision: str | None = None) -> list[str]:

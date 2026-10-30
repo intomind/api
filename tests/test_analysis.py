@@ -195,7 +195,7 @@ def test_integrity_detects_mutation():
 
 
 def test_unverified_capture_loads_with_warning():
-    """Pre-P0 captures have no checksum: warn, do not fail."""
+    """Captures from before checksums were kept have none: warn, do not fail."""
     rng = np.random.default_rng(5)
     x = rng.normal(0, 5.0, 1000)
     write_capture("t_unver", x, x, checksum=False)

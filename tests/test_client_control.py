@@ -415,7 +415,7 @@ def test_scan_lists_a_device_the_system_already_holds_connected():
     import asyncio
     from bleak.backends.device import BLEDevice
     from intomind import client, pairing, protocol as P
-    ours = BLEDevice("EE:AE:00:00:00:01", "IntoMind-1-0001", {"path": "/org/bluez/hci0/dev_EE_AE_00_00_00_01",
+    ours = BLEDevice("02:00:00:00:00:01", "IntoMind-1-0001", {"path": "/org/bluez/hci0/dev_02_00_00_00_00_01",
                      "props": {"Connected": True, "UUIDs": [P.SERVICE]}})
     other = BLEDevice("11:22:33:44:55:66", "Headphones", {"path": "/org/bluez/hci0/dev_11_22_33_44_55_66",
                       "props": {"Connected": True, "UUIDs": ["0000110b-0000-1000-8000-00805f9b34fb"]}})
@@ -435,7 +435,7 @@ def test_scan_lists_a_device_the_system_already_holds_connected():
         found = asyncio.run(client.scan(0.1))
     finally:
         client.BleakScanner, pairing.held_devices = saved
-    assert [d.address for d in found] == ["EE:AE:00:00:00:01"]
+    assert [d.address for d in found] == ["02:00:00:00:00:01"]
 
 
 def test_scan_reports_each_device_the_moment_it_is_heard_and_stops_when_told():
@@ -447,9 +447,9 @@ def test_scan_reports_each_device_the_moment_it_is_heard_and_stops_when_told():
     from types import SimpleNamespace
     from bleak.backends.device import BLEDevice
     from intomind import client, pairing, protocol as P
-    held_one = BLEDevice("EE:AE:00:00:00:02", "IntoMind-1-0002", {"path": "/org/bluez/hci0/dev_EE_AE_00_00_00_02",
+    held_one = BLEDevice("02:00:00:00:00:02", "IntoMind-1-0002", {"path": "/org/bluez/hci0/dev_02_00_00_00_00_02",
                          "props": {"Connected": True, "UUIDs": [P.SERVICE]}})
-    ours, name = "EE:AE:00:00:00:01", "IntoMind-1-0001"
+    ours, name = "02:00:00:00:00:01", "IntoMind-1-0001"
     log = []
 
     def adv(uuids, local_name=None):
@@ -501,7 +501,7 @@ def test_a_packet_delivered_twice_is_counted_once():
     vectors = [v for v in by_kind("eeg_data") if not P.decode_packet(bytes.fromhex(v["bytes"]), 4).discontinuity]
     assert vectors, "a plain data packet vector"
     raw = bytes.fromhex(vectors[0]["bytes"])
-    dev = client.Device(types.SimpleNamespace(address="EE:AE:00:00:00:01", name="IntoMind-1-0001", details={}))
+    dev = client.Device(types.SimpleNamespace(address="02:00:00:00:00:01", name="IntoMind-1-0001", details={}))
     dev.info = types.SimpleNamespace(channels=4, tick_hz=1_000_000, microvolts_per_count=lambda gain: 1.0)
     dev._on_data(None, raw)
     n, gaps = dev.samples_total, dev.gaps_announced
@@ -537,7 +537,7 @@ def test_the_rate_from_packets_reads_their_own_index():
     have, so such a recording raised instead of being saved."""
     import types
     from intomind import client, protocol as P
-    dev = client.Device(types.SimpleNamespace(address="EE:AE:00:00:00:01", name="IntoMind One", details={}))
+    dev = client.Device(types.SimpleNamespace(address="02:00:00:00:00:01", name="IntoMind One", details={}))
     dev.info = types.SimpleNamespace(tick_hz=1_000_000)
 
     def packet(index, device_time):
@@ -560,7 +560,7 @@ def test_a_generated_sample_says_so_and_a_measured_one_does_not():
     for v in by_kind("eeg_data"):
         raw = bytes.fromhex(v["bytes"])
         pkt = P.decode_packet(raw, 4)
-        dev = client.Device(types.SimpleNamespace(address="EE:AE:00:00:00:01", name="IntoMind One", details={}))
+        dev = client.Device(types.SimpleNamespace(address="02:00:00:00:00:01", name="IntoMind One", details={}))
         dev.info = types.SimpleNamespace(channels=4, tick_hz=1_000_000, microvolts_per_count=lambda gain: 1.0)
         got = []
         dev.on_sample = lambda _d, s: got.append(s)
@@ -584,7 +584,7 @@ def test_every_sample_says_whether_lead_off_detection_was_running():
             raw[1] ^= flip                      # the flags byte
             raw = bytes(raw)
             pkt = P.decode_packet(raw, 4)
-            dev = client.Device(types.SimpleNamespace(address="EE:AE:00:00:00:01", name="IntoMind One", details={}))
+            dev = client.Device(types.SimpleNamespace(address="02:00:00:00:00:01", name="IntoMind One", details={}))
             dev.info = types.SimpleNamespace(channels=4, tick_hz=1_000_000, microvolts_per_count=lambda gain: 1.0)
             got = []
             dev.on_sample = lambda _d, s: got.append(s)
@@ -660,7 +660,7 @@ def test_a_stream_the_device_ends_on_usb_power_is_noticed_and_its_samples_kept()
         return bytes(b)
 
     def device(protocol):
-        dev = client.Device(types.SimpleNamespace(address="EE:AE:00:00:00:01", name="IntoMind One", details={}))
+        dev = client.Device(types.SimpleNamespace(address="02:00:00:00:00:01", name="IntoMind One", details={}))
         dev.info = types.SimpleNamespace(channels=4, tick_hz=1_000_000, protocol=protocol,
                                          microvolts_per_count=lambda gain: 1.0)
         dev.streaming = True
