@@ -63,17 +63,17 @@ false is a change to refuse.
    specific hardware in this library is a bug, because hardware this library
    does not know about is the whole point.
 2. **This library declares nothing about the world it is installed in.** It
-   does not know where captures go, which installation it is part of, or
+   does not know where recordings go, which installation it is part of, or
    which software is recording. An application declares those
    (`use_captures_dir`, `use_site`, `use_repo`). Anything undeclared is
    recorded as unknown, never guessed.
-3. **A capture is the record, and it is immutable once written.** Checksums
+3. **A recording is the record, and it is immutable once written.** Checksums
    are written last, so a run that dies mid-save is never mistaken for a
-   complete capture. Nothing rewrites a manifest after the fact.
+   complete recording. Nothing rewrites a manifest after the fact.
 4. **Real numbers only, from the code that measured them.** Never invent a
    statistic.
 
-The dependency runs one way. Applications import this library; this library
+The dependency runs one way. Applications import this library. This library
 imports nothing of theirs and names none of them. A test that reads a
 particular device's firmware is a conformance test for that device and
 belongs with that device, not here: this library is held to the published

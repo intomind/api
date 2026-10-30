@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "intomind"
-version = "1.4.2"
+version = "1.4.3"
 description = "The IntoMind instrument API: the protocol, the recording, its provenance, and the analyses that read it back"
 readme = "README.md"
 requires-python = ">=3.11"
@@ -27,9 +27,10 @@ dependencies = ["bleak", "numpy"]
 analysis = ["scipy"]
 # MATLAB version 7.3 export, which is HDF5.
 mat = ["h5py"]
-# The console some devices have and some do not.
-serial = ["pyserial"]
-all = ["scipy", "h5py", "pyserial"]
+# Kept so an install line that names it keeps working. Nothing in the
+# library reads a serial console, so it brings in nothing.
+serial = []
+all = ["scipy", "h5py"]
 
 [project.urls]
 Homepage = "https://intomind.com"

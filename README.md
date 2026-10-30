@@ -29,9 +29,9 @@ about any application built on top of it.
 | `session.py` | discovery and the set of connected devices |
 | `instrument.py` | instrument state and decoding, independent of any protocol |
 | `experiments.py` | the recorder, and the cued protocols built on it |
-| `provenance.py` | what a capture records about how it was produced |
-| `analysis.py` | the analyses a capture supports |
-| `export.py` | a capture as npz, EDF, BDF, csv, tsv, or MATLAB |
+| `provenance.py` | what a recording records about how it was produced |
+| `analysis.py` | the analyses a recording supports |
+| `export.py` | a recording as npz, EDF, BDF, csv, tsv, or MATLAB |
 | `model.py` | the device's encoder, on the host, and head training |
 | `adapters.py` | support for hardware this library was not written for |
 | `montage.py` | where the electrodes are, as data rather than as a sentence |
@@ -114,7 +114,7 @@ export.export(label, "bdf")        # any name in export.FORMATS
 export.export_npz(label)           # or by name, same six keys back
 ```
 
-Six formats, one shape, and every one of them refuses a capture that does
+Six formats, one shape, and every one of them refuses a recording that does
 not verify. `npz` and `bdf` return every sample to the count it was
 recorded at, measured per file rather than assumed. `edf` is sixteen bits
 and says so. `mat` is MATLAB v7.3, which needs `h5py` and says which line
@@ -158,7 +158,7 @@ the reset, and `samples_before_restart` says how many samples were left
 out. A count that steps back later is a break whose length is not known,
 and they refuse it rather than invent one.
 
-## Where captures live
+## Where recordings live
 
 `$INTOMIND_CAPTURES`, or `~/.local/share/intomind/captures`. An
 application that keeps its own collection says so once:

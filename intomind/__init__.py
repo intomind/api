@@ -26,7 +26,7 @@ from .session import Session
 
 from . import adapters, montage, placement, protocol, provenance, timebase
 
-__version__ = "1.4.2"
+__version__ = "1.4.3"
 
 # `analysis`, `export`, and `model` are reached on first use rather than at
 # import, because the analyses need a signal processing library that this
